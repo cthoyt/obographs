@@ -77,11 +77,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx_automodapi.automodapi",
     "sphinx_automodapi.smart_resolver",
-    # 'texext',
 ]
-
-
-extensions.append("sphinx_click.ext")
 
 
 # generate autosummary pages

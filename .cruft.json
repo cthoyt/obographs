@@ -12,7 +12,7 @@
       "author_email": "cthoyt@gmail.com",
       "github_organization_name": "cthoyt",
       "github_repository_name": "obographs",
-      "command_line_interface": true,
+      "command_line_interface": false,
       "gitlab": false,
       "runner": "tox",
       "__not_charlie": "",

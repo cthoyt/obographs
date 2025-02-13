@@ -8,7 +8,6 @@ OBO Graphs |release| Documentation
 
    installation
    usage
-   cli
 
 Indices and Tables
 ------------------
