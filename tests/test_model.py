@@ -3,13 +3,13 @@
 import unittest
 
 from obographs import GraphDocument, read
-from obographs.model import get_id_to_node, get_id_to_edges
+from obographs.model import get_id_to_edges, get_id_to_node
 
 
 def read_example(name: str) -> GraphDocument:
     """Read the example OBO Graph JSON document."""
     url = f"https://raw.githubusercontent.com/geneontology/obographs/refs/heads/master/examples/{name}.json"
-    return read(url)
+    return read(url, squeeze=False)
 
 
 class TestModel(unittest.TestCase):
@@ -30,4 +30,7 @@ class TestModel(unittest.TestCase):
 
         id_to_edges = get_id_to_edges(graph)
         self.assertIn("http://purl.obolibrary.org/obo/T/Female", id_to_edges)
-        self.assertIn(("is_a", "http://purl.obolibrary.org/obo/T/Person"), id_to_edges["http://purl.obolibrary.org/obo/T/Female"])
+        self.assertIn(
+            ("is_a", "http://purl.obolibrary.org/obo/T/Person"),
+            id_to_edges["http://purl.obolibrary.org/obo/T/Female"],
+        )

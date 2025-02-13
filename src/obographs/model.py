@@ -3,16 +3,17 @@
 .. seealso::
 
     - the defining repository https://github.com/geneontology/obographs
-    - the JSON schema https://github.com/geneontology/obographs/blob/master/schema/obographs-schema.json
+    - the JSON schema
+      https://github.com/geneontology/obographs/blob/master/schema/obographs-schema.json
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
-from typing import Any, Literal, TypeAlias
 from collections import defaultdict
+from pathlib import Path
+from typing import Any, Literal, TypeAlias, overload
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +42,8 @@ SynonymPredicate: TypeAlias = Literal[
     "hasRelatedSynonym",
 ]
 NodeType: TypeAlias = Literal["CLASS", "PROPERTY", "INDIVIDUAL"]
+
+TimeoutHint = int | float | None
 
 #: A mapping from OBO flat file format internal synonym types to OBO in OWL vocabulary
 #: identifiers. See https://owlcollab.github.io/oboformat/doc/GO.format.obo-1_4.html
@@ -149,8 +152,34 @@ def get_id_to_edges(graph: Graph) -> dict[str, list[tuple[str, str]]]:
     return {node_id: list(predicate_object_pairs) for node_id, predicate_object_pairs in dd.items()}
 
 
-def read(source: str, *, timeout: int | float | None = None) -> GraphDocument:
-    """Read an OBO Graph document."""
+# docstr-coverage:excused `overload`
+@overload
+def read(
+    source: str, *, timeout: TimeoutHint = ..., squeeze: Literal[False] = ...
+) -> GraphDocument: ...
+
+
+# docstr-coverage:excused `overload`
+@overload
+def read(source: str, *, timeout: TimeoutHint = ..., squeeze: Literal[True] = ...) -> Graph: ...
+
+
+def read(
+    source: str, *, timeout: TimeoutHint = None, squeeze: bool = True
+) -> Graph | GraphDocument:
+    """Read an OBO Graph document.
+
+    :param source: A file path or URL to an OBO Graph JSON
+    :param timeout: The timeout for getting a URL
+    :param squeeze: By default, will unpack the first graph from a graph document that
+        only has a single graph and return a :class:`Graph` object. If `true` and
+        multiple graphs are received, will raise an error. Set this to `false` to return
+        a GraphDocument containing all graphs.
+
+    :returns: A graph or graph document
+
+    :raises ValueError: If squeeze is set to true and multiple graphs are received
+    """
     if (isinstance(source, str) and source.startswith("https://")) or source.startswith("http://"):
         import requests
 
@@ -159,15 +188,25 @@ def read(source: str, *, timeout: int | float | None = None) -> GraphDocument:
         else:
             res = requests.get(source, timeout=timeout)
             res_json = res.json()
-            rv = GraphDocument.model_validate(res_json)
-            return rv
+            graph_document = GraphDocument.model_validate(res_json)
 
-    if isinstance(source, str | Path):
+    elif isinstance(source, str | Path):
         path = Path(source).expanduser().resolve()
         if path.is_file():
             if path.suffix.endswith(".gz"):
                 raise NotImplementedError
             else:
                 with path.open() as file:
-                    return GraphDocument.model_validate(json.load(file))
-    raise TypeError(f"Unhandled source: {source}")
+                    graph_document = GraphDocument.model_validate(json.load(file))
+    else:
+        raise TypeError(f"Unhandled source: {source}")
+
+    if not squeeze:
+        return graph_document
+    elif len(graph_document.graphs) != 1:
+        raise ValueError(
+            f"graph document has {len(graph_document.graphs)} graphs, "
+            f"so can not squeeze. set squeeze=False"
+        )
+    else:
+        return graph_document.graphs[0]
