@@ -13,13 +13,14 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, overload, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from .standardized import StandardizedGraph
     import curies
+
+    from .standardized import StandardizedGraph
 
 __all__ = [
     "Definition",
