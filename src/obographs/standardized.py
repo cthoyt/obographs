@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Self
-
 from curies import Converter, Reference
 from pydantic import BaseModel, Field
+from typing_extensions import Self
 
 from obographs.model import Definition, Edge, Graph, Meta, Node, NodeType, Property, Synonym, Xref
 
