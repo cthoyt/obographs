@@ -58,10 +58,10 @@ OBO_SYNONYM_TO_OIO: dict[str, SynonymPredicate] = {
 class Property(BaseModel):
     """Represent a property inside a metadata element."""
 
-    pred: str = Field(...)
-    val: str = Field(
-        ...,
-    )
+    pred: str
+    val: str
+    xrefs: list[str] | None = None
+    meta: Meta | None = None
 
 
 class Definition(BaseModel):
@@ -74,7 +74,7 @@ class Definition(BaseModel):
 class Xref(BaseModel):
     """Represents a cross-reference."""
 
-    val: str = Field(...)
+    val: str
 
 
 class Synonym(BaseModel):
@@ -87,6 +87,7 @@ class Synonym(BaseModel):
         default_factory=list,
         description="A list of CURIEs/IRIs for provenance for the synonym",
     )
+    meta: Meta | None = None
 
 
 class Meta(BaseModel):
@@ -137,6 +138,7 @@ class GraphDocument(BaseModel):
     """Represents a list of OBO graphs."""
 
     graphs: list[Graph]
+    meta: Meta | None = None
 
 
 def get_id_to_node(graph: Graph) -> dict[str, Node]:

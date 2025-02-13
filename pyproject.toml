@@ -52,6 +52,7 @@ license-files = [
 requires-python = ">=3.10"
 dependencies = [
     "pydantic",
+    "curies",
 ]
 
 [project.optional-dependencies]
