@@ -2,8 +2,11 @@
 
 import unittest
 
+from curies import Converter
+
 from obographs import GraphDocument, read
 from obographs.model import get_id_to_edges, get_id_to_node
+from obographs.standardized import StandardizedGraph
 
 
 def read_example(name: str) -> GraphDocument:
@@ -34,3 +37,12 @@ class TestModel(unittest.TestCase):
             ("is_a", "http://purl.obolibrary.org/obo/T/Person"),
             id_to_edges["http://purl.obolibrary.org/obo/T/Female"],
         )
+
+        converter = Converter.from_prefix_map(
+            {
+                "obo": "http://purl.obolibrary.org/obo/",
+            }
+        )
+
+        standard_graph = StandardizedGraph.from_obograph_raw(graph, converter)
+        self.assertEqual("http://purl.obolibrary.org/obo/T", standard_graph.id)

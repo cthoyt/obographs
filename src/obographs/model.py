@@ -13,9 +13,14 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    import curies
+
+    from .standardized import StandardizedGraph
 
 __all__ = [
     "Definition",
@@ -58,10 +63,10 @@ OBO_SYNONYM_TO_OIO: dict[str, SynonymPredicate] = {
 class Property(BaseModel):
     """Represent a property inside a metadata element."""
 
-    pred: str = Field(...)
-    val: str = Field(
-        ...,
-    )
+    pred: str
+    val: str
+    xrefs: list[str] | None = None
+    meta: Meta | None = None
 
 
 class Definition(BaseModel):
@@ -74,7 +79,7 @@ class Definition(BaseModel):
 class Xref(BaseModel):
     """Represents a cross-reference."""
 
-    val: str = Field(...)
+    val: str
 
 
 class Synonym(BaseModel):
@@ -87,6 +92,7 @@ class Synonym(BaseModel):
         default_factory=list,
         description="A list of CURIEs/IRIs for provenance for the synonym",
     )
+    meta: Meta | None = None
 
 
 class Meta(BaseModel):
@@ -132,11 +138,18 @@ class Graph(BaseModel):
     domainRangeAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
     propertyChainAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
 
+    def standardize(self, converter: curies.Converter) -> StandardizedGraph:
+        """Standardize the graph."""
+        from .standardized import StandardizedGraph
+
+        return StandardizedGraph.from_obograph_raw(self, converter)
+
 
 class GraphDocument(BaseModel):
     """Represents a list of OBO graphs."""
 
     graphs: list[Graph]
+    meta: Meta | None = None
 
 
 def get_id_to_node(graph: Graph) -> dict[str, Node]:
