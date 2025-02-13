@@ -49,8 +49,9 @@ graph_raw = obographs.read(url)
 
 The OBO Graph JSON schema uses non-Pythonic names, and it's inherently not aware
 of semantics - it uses a combination of URIs and ad-hoc symbols as identifiers.
-`obographs` implements a standardization workflow that creates new data structures
-with parsed/normalized URIs and symbols that has Pythonic nams. Use it like:
+`obographs` implements a standardization workflow that creates new data
+structures with parsed/normalized URIs and symbols that has Pythonic nams. Use
+it like:
 
 ```python
 import curies
@@ -60,8 +61,8 @@ converter = curies.get_bioregistry_converter()
 graph = graph_raw.standardize(converter)
 ```
 
-Now, this graph object will have nice Pythonic names and references parsed
-as `curies.Reference` objects.
+Now, this graph object will have nice Pythonic names and references parsed as
+`curies.Reference` objects.
 
 ## 🚀 Installation
 
