@@ -45,4 +45,4 @@ class TestModel(unittest.TestCase):
         )
 
         standard_graph = StandardizedGraph.from_obograph_raw(graph, converter)
-        self.assertEqual('http://purl.obolibrary.org/obo/T', standard_graph.id)
+        self.assertEqual("http://purl.obolibrary.org/obo/T", standard_graph.id)
