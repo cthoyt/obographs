@@ -13,9 +13,13 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, overload
+from typing import Any, Literal, TypeAlias, overload, TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from .standardized import StandardizedGraph
+    import curies
 
 __all__ = [
     "Definition",
@@ -132,6 +136,12 @@ class Graph(BaseModel):
     logicalDefinitionAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
     domainRangeAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
     propertyChainAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
+
+    def standardize(self, converter: curies.Converter) -> StandardizedGraph:
+        """Standardize the graph."""
+        from .standardized import StandardizedGraph
+
+        return StandardizedGraph.from_obograph_raw(self, converter)
 
 
 class GraphDocument(BaseModel):

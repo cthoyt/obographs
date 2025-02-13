@@ -44,11 +44,24 @@ data model.
 import obographs
 
 url = "https://raw.githubusercontent.com/geneontology/obographs/refs/heads/master/examples/abox.json"
-graph_document = obographs.read(url)
+graph_raw = obographs.read(url)
 ```
 
-Note that the OBO Graph JSON schema uses non-pythonic names. The underlying data
-model does not attempt to give better names to the fields.
+The OBO Graph JSON schema uses non-Pythonic names, and it's inherently not aware
+of semantics - it uses a combination of URIs and ad-hoc symbols as identifiers.
+`obographs` implements a standardization workflow that creates new data structures
+with parsed/normalized URIs and symbols that has Pythonic nams. Use it like:
+
+```python
+import curies
+
+converter = curies.get_bioregistry_converter()
+
+graph = graph_raw.standardize(converter)
+```
+
+Now, this graph object will have nice Pythonic names and references parsed
+as `curies.Reference` objects.
 
 ## 🚀 Installation
 
