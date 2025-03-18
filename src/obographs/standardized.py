@@ -170,11 +170,12 @@ class StandardizedNode(BaseModel):
     type: NodeType | None = Field(None, description="Type of node")
 
     @classmethod
-    def from_obograph_raw(cls, node: Node, converter: Converter) -> Self:
+    def from_obograph_raw(cls, node: Node, converter: Converter) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
         reference = _curie_or_uri_to_ref(node.id, converter)
         if reference is None:
-            raise ValueError
+            logger.warning("failed to parse node's ID %s", node.id)
+            return None
         return cls(
             reference=reference,
             label=node.lbl,
@@ -194,20 +195,24 @@ class StandardizedEdge(BaseModel):
     @classmethod
     def from_obograph_raw(cls, edge: Edge, converter: Converter) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
-        s = _curie_or_uri_to_ref(edge.sub, converter)
-        if not s:
-            logger.warning("failed to parse edge's subject %s", s)
+        subject = _curie_or_uri_to_ref(edge.sub, converter)
+        if not subject:
+            logger.warning("failed to parse edge's subject %s", edge.sub)
             return None
-        p = _curie_or_uri_to_ref(edge.pred, converter)
-        o = _curie_or_uri_to_ref(edge.obj, converter)
-        if not s or not p or not o:
+        predicate = _curie_or_uri_to_ref(edge.pred, converter)
+        if not predicate:
+            logger.warning("failed to parse edge's predicate %s", edge.pred)
+            return None
+        obj = _curie_or_uri_to_ref(edge.obj, converter)
+        if not obj:
+            logger.warning("failed to parse edge's object %s", edge.obj)
             return None
         return cls(
-            subject=s,
-            predicate=p,
-            object=o,
+            subject=subject,
+            predicate=predicate,
+            object=obj,
             meta=StandardizedMeta.from_obograph_raw(
-                edge.meta, converter, flag=f"{s.curie} {p.curie} {o.curie}"
+                edge.meta, converter, flag=f"{subject.curie} {predicate.curie} {obj.curie}"
             ),
         )
 
