@@ -286,11 +286,7 @@ BUILTINS = {
 def _curie_or_uri_to_ref(s: str, converter: Converter) -> Reference | None:
     if s in BUILTINS:
         return BUILTINS[s]
-    if converter.is_uri(s):
-        p, o = converter.parse_uri(s)
-        return Reference(prefix=p, identifier=o)
-    elif converter.is_curie(s):
-        c = converter.standardize_curie(s)
-        p, o = converter.parse_curie(c)
-        return Reference(prefix=p, identifier=o)
+    reference_tuple = converter.parse(s, strict=False)
+    if reference_tuple is not None:
+        return reference_tuple.to_pydantic()
     return None
