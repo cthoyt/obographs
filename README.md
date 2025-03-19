@@ -50,7 +50,7 @@ graph_raw = obographs.read(url)
 The OBO Graph JSON schema uses non-Pythonic names, and it's inherently not aware
 of semantics - it uses a combination of URIs and ad-hoc symbols as identifiers.
 `obographs` implements a standardization workflow that creates new data
-structures with parsed/normalized URIs and symbols that has Pythonic nams. Use
+structures with parsed/normalized URIs and symbols that has Pythonic names. Use
 it like:
 
 ```python
