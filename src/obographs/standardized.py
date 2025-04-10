@@ -16,6 +16,8 @@ __all__ = [
     "StandardizedGraph",
     "StandardizedMeta",
     "StandardizedNode",
+    "StandardizedProperty",
+    "StandardizedSynonym",
     "StandardizedXref",
 ]
 
