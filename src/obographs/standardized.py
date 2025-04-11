@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from curies import Converter, Reference
+from curies import Converter, Reference, vocabulary
 from pydantic import BaseModel, Field
 from typing_extensions import Self
 
@@ -278,9 +278,9 @@ def _parse_list(curie_or_uris: list[str] | None, converter: Converter) -> list[R
 
 #: defined in https://github.com/geneontology/obographs/blob/6676b10a5cce04707d75b9dd46fa08de70322b0b/obographs-owlapi/src/main/java/org/geneontology/obographs/owlapi/FromOwl.java#L36-L39
 BUILTINS = {
-    "is_a": Reference(prefix="rdfs", identifier="subClassOf"),
-    "subPropertyOf": Reference(prefix="rdfs", identifier="subPropertyOf"),
-    "type": Reference(prefix="rdf", identifier="type"),
+    "is_a": vocabulary.is_a,
+    "subPropertyOf": vocabulary.subproperty_of,
+    "type": vocabulary.rdf_type,
     "inverseOf": Reference(prefix="owl", identifier="inverseOf"),
 }
 
