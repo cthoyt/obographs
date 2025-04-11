@@ -1,8 +1,6 @@
 [build-system]
-requires = ["uv>=0.5.13,<0.6.0"]
-# The uv backend entered preview mode in https://github.com/astral-sh/uv/pull/8886/files
-# with the 0.5.0 release. See also https://github.com/astral-sh/uv/issues/3957 for tracking.
-build-backend = "uv"
+requires = ["uv_build>=0.6.6,<0.7"]
+build-backend = "uv_build"
 
 [project]
 name = "obographs"
@@ -56,7 +54,8 @@ dependencies = [
     "typing-extensions",
 ]
 
-[project.optional-dependencies]
+# see https://peps.python.org/pep-0735/ and https://docs.astral.sh/uv/concepts/dependencies/#dependency-groups
+[dependency-groups]
 tests = [
     "pytest",
     "coverage[toml]",
@@ -67,9 +66,50 @@ docs = [
     "sphinx_automodapi",
     "autodoc_pydantic",
 ]
+lint = [
+    "ruff",
+]
+typing = [
+    { include-group = "tests" },
+    "mypy",
+    "pydantic",
+    "types-requests",
+]
+docs-lint = [
+    { include-group = "docs" },
+    "doc8",
+]
+format-docs = [
+    { include-group = "docs" },
+    "docstrfmt",
+]
+doctests = [
+    "xdoctest",
+    "pygments",
+]
+pyroma = [
+    "pyroma",
+    "pygments",
+]
+# follow https://github.com/astral-sh/uv/issues/6298 for switching to a uv-based version bump workflow
+bump = [
+    "bump-my-version",
+]
+build = [
+    "uv",
+    "uv-build",
+]
+release = [
+    { include-group = "build" },
+    "uv",
+    "keyring",
+]
 network = [
     "requests",
 ]
+
+# see https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#dependencies-optional-dependencies
+# [project.optional-dependencies]
 
 # See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#urls
 # and also https://packaging.python.org/en/latest/specifications/well-known-project-urls/
@@ -114,6 +154,9 @@ source = [
 omit = [
     "tests/*",
     "docs/*",
+    "src/obographs/version.py",
+    "src/obographs/__main__.py",
+    "src/obographs/cli.py",
 ]
 
 [tool.coverage.paths]
