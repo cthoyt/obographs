@@ -64,7 +64,12 @@ class Property(BaseModel):
     """Represent a property inside a metadata element."""
 
     pred: str
-    val: str
+    val: str | None = Field(
+        None,
+        description="Stores the value of the property. This can be a string representing a "
+        "literal or IRI. This isn't supposed to be nullable, but it happens a lot - might be a "
+        "bug in OWLAPI or ROBOT",
+    )
     xrefs: list[str] | None = None
     meta: Meta | None = None
 
@@ -87,7 +92,7 @@ class Synonym(BaseModel):
 
     val: str | None = Field(default=None)
     pred: str = Field(default="hasExactSynonym")
-    synonymType: str | None = Field(examples=["OMO:0003000"])  # noqa:N815
+    synonymType: str | None = Field(None, examples=["OMO:0003000"])  # noqa:N815
     xrefs: list[str] = Field(
         default_factory=list,
         description="A list of CURIEs/IRIs for provenance for the synonym",
@@ -123,7 +128,7 @@ class Node(BaseModel):
     id: str = Field(..., description="The IRI for the node")
     lbl: str | None = Field(None, description="The name of the node")
     meta: Meta | None = None
-    type: NodeType = Field(..., description="Type of node")
+    type: NodeType | None = Field(None, description="Type of node")
 
 
 class Graph(BaseModel):

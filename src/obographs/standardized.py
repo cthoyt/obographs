@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from curies import Converter, Reference
+import logging
+
+from curies import Converter, Reference, vocabulary
 from pydantic import BaseModel, Field
 from typing_extensions import Self
 
@@ -14,24 +16,39 @@ __all__ = [
     "StandardizedGraph",
     "StandardizedMeta",
     "StandardizedNode",
+    "StandardizedProperty",
+    "StandardizedSynonym",
     "StandardizedXref",
 ]
+
+logger = logging.getLogger(__name__)
 
 
 class StandardizedProperty(BaseModel):
     """A standardized property."""
 
     predicate: Reference
-    value: Reference
+    value: Reference | str = Field(
+        ..., description="Parsed into a Reference if a CURIE or IRI, or a string if it's a literal"
+    )
     xrefs: list[Reference] | None = None
     meta: StandardizedMeta | None = None
 
     @classmethod
     def from_obograph_raw(cls, prop: Property, converter: Converter) -> Self:
         """Instantiate by standardizing a raw OBO Graph object."""
+        if not prop.val or not prop.pred:
+            raise ValueError
+        value: Reference | str | None
+        if not prop.val.startswith("http://") and not prop.val.startswith("https"):
+            value = _curie_or_uri_to_ref(prop.val, converter)
+        else:
+            value = prop.val
+        if value is None:
+            raise ValueError
         return cls(
             predicate=_curie_or_uri_to_ref(prop.pred, converter),
-            value=_curie_or_uri_to_ref(prop.val, converter),
+            value=value,
         )
 
 
@@ -95,33 +112,54 @@ class StandardizedMeta(BaseModel):
     properties: list[StandardizedProperty] | None = None
 
     @classmethod
-    def from_obograph_raw(cls, meta: Meta | None, converter: Converter) -> Self | None:
+    def from_obograph_raw(  # noqa:C901
+        cls, meta: Meta | None, converter: Converter, flag: str = ""
+    ) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
         if meta is None:
             return None
+
+        xrefs = []
+        for raw_xref in meta.xrefs or []:
+            if raw_xref.val:
+                try:
+                    st_xref = StandardizedXref.from_obograph_raw(raw_xref, converter)
+                except ValueError:
+                    logger.debug("[%s] failed to standardize xref: %s", flag, raw_xref)
+                else:
+                    xrefs.append(st_xref)
+
+        synonyms = []
+        for raw_synonym in meta.synonyms or []:
+            if raw_synonym.val:
+                try:
+                    s = StandardizedSynonym.from_obograph_raw(raw_synonym, converter)
+                except ValueError:
+                    logger.debug("[%s] failed to standardize synonym: %s", flag, raw_synonym)
+                else:
+                    synonyms.append(s)
+
+        props = []
+        for raw_prop in meta.basicPropertyValues or []:
+            if raw_prop.val and raw_prop.pred:
+                try:
+                    prop = StandardizedProperty.from_obograph_raw(raw_prop, converter)
+                except ValueError:
+                    logger.debug("[%s] failed to standardize property: %s", flag, raw_prop)
+                else:
+                    props.append(prop)
+
         return cls(
             definition=StandardizedDefinition.from_obograph_raw(meta.definition, converter),
             subsets=[_curie_or_uri_to_ref(subset, converter) for subset in meta.subsets]
             if meta.subsets
             else None,
-            xrefs=[StandardizedXref.from_obograph_raw(xref, converter) for xref in meta.xrefs]
-            if meta.xrefs
-            else None,
-            synonyms=[
-                StandardizedSynonym.from_obograph_raw(synonym, converter)
-                for synonym in meta.synonyms
-            ]
-            if meta.synonyms
-            else None,
+            xrefs=xrefs or None,
+            synonyms=synonyms or None,
             comments=meta.comments,
             version=meta.version,
             deprecated=meta.deprecated,
-            properties=[
-                StandardizedProperty.from_obograph_raw(p, converter)
-                for p in meta.basicPropertyValues
-            ]
-            if meta.basicPropertyValues
-            else None,
+            properties=props or None,
         )
 
 
@@ -131,15 +169,19 @@ class StandardizedNode(BaseModel):
     reference: Reference
     label: str | None = Field(None)
     meta: StandardizedMeta | None = None
-    type: NodeType = Field(..., description="Type of node")
+    type: NodeType | None = Field(None, description="Type of node")
 
     @classmethod
-    def from_obograph_raw(cls, node: Node, converter: Converter) -> Self:
+    def from_obograph_raw(cls, node: Node, converter: Converter) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
+        reference = _curie_or_uri_to_ref(node.id, converter)
+        if reference is None:
+            logger.warning("failed to parse node's ID %s", node.id)
+            return None
         return cls(
-            reference=_curie_or_uri_to_ref(node.id, converter),
+            reference=reference,
             label=node.lbl,
-            meta=StandardizedMeta.from_obograph_raw(node.meta, converter),
+            meta=StandardizedMeta.from_obograph_raw(node.meta, converter, flag=reference.curie),
             type=node.type,
         )
 
@@ -153,13 +195,27 @@ class StandardizedEdge(BaseModel):
     meta: StandardizedMeta | None = None
 
     @classmethod
-    def from_obograph_raw(cls, node: Edge, converter: Converter) -> Self:
+    def from_obograph_raw(cls, edge: Edge, converter: Converter) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
+        subject = _curie_or_uri_to_ref(edge.sub, converter)
+        if not subject:
+            logger.warning("failed to parse edge's subject %s", edge.sub)
+            return None
+        predicate = _curie_or_uri_to_ref(edge.pred, converter)
+        if not predicate:
+            logger.warning("failed to parse edge's predicate %s", edge.pred)
+            return None
+        obj = _curie_or_uri_to_ref(edge.obj, converter)
+        if not obj:
+            logger.warning("failed to parse edge's object %s", edge.obj)
+            return None
         return cls(
-            subject=_curie_or_uri_to_ref(node.sub, converter),
-            predicate=_curie_or_uri_to_ref(node.pred, converter),
-            object=_curie_or_uri_to_ref(node.obj, converter),
-            meta=StandardizedMeta.from_obograph_raw(node.meta, converter),
+            subject=subject,
+            predicate=predicate,
+            object=obj,
+            meta=StandardizedMeta.from_obograph_raw(
+                edge.meta, converter, flag=f"{subject.curie} {predicate.curie} {obj.curie}"
+            ),
         )
 
 
@@ -178,33 +234,61 @@ class StandardizedGraph(BaseModel):
         """Instantiate by standardizing a raw OBO Graph object."""
         return cls(
             id=graph.id,
-            meta=StandardizedMeta.from_obograph_raw(graph.meta, converter),
-            nodes=[StandardizedNode.from_obograph_raw(node, converter) for node in graph.nodes],
-            edges=[StandardizedEdge.from_obograph_raw(edge, converter) for edge in graph.edges],
+            meta=StandardizedMeta.from_obograph_raw(graph.meta, converter, flag=graph.id or ""),
+            nodes=[
+                s_node
+                for node in graph.nodes
+                if (s_node := StandardizedNode.from_obograph_raw(node, converter))
+            ],
+            edges=[
+                s_edge
+                for edge in graph.edges
+                if (s_edge := StandardizedEdge.from_obograph_raw(edge, converter))
+            ],
         )
 
+    def _get_property(self, predicate: Reference) -> str | Reference | None:
+        if self.meta is None:
+            return None
 
-def _parse_list(ss: list[str] | None, converter: Converter) -> list[Reference] | None:
-    if not ss:
+        for p in self.meta.properties or []:
+            if p.predicate == predicate:
+                return p.value
+
         return None
-    return [_curie_or_uri_to_ref(x, converter) for x in ss]
+
+    @property
+    def name(self) -> str | None:
+        """Look up the name of the graph."""
+        r = self._get_property(Reference(prefix="dcterms", identifier="title"))
+        if isinstance(r, Reference):
+            raise TypeError
+        return r
+
+
+def _parse_list(curie_or_uris: list[str] | None, converter: Converter) -> list[Reference] | None:
+    if not curie_or_uris:
+        return None
+    return [
+        reference
+        for curie_or_uri in curie_or_uris
+        if (reference := _curie_or_uri_to_ref(curie_or_uri, converter))
+    ]
 
 
 #: defined in https://github.com/geneontology/obographs/blob/6676b10a5cce04707d75b9dd46fa08de70322b0b/obographs-owlapi/src/main/java/org/geneontology/obographs/owlapi/FromOwl.java#L36-L39
 BUILTINS = {
-    "is_a": Reference(prefix="rdfs", identifier="subClassOf"),
-    "subPropertyOf": Reference(prefix="rdfs", identifier="subPropertyOf"),
-    "type": Reference(prefix="rdf", identifier="type"),
+    "is_a": vocabulary.is_a,
+    "subPropertyOf": vocabulary.subproperty_of,
+    "type": vocabulary.rdf_type,
     "inverseOf": Reference(prefix="owl", identifier="inverseOf"),
 }
 
 
-def _curie_or_uri_to_ref(s: str, converter: Converter) -> Reference:
+def _curie_or_uri_to_ref(s: str, converter: Converter) -> Reference | None:
     if s in BUILTINS:
         return BUILTINS[s]
-    if converter.is_uri(s):
-        p, o = converter.parse_uri(s)
-        return Reference(prefix=p, identifier=o)
-    elif converter.is_curie(s):
-        pass
-    raise ValueError(f"can't parse string: {s}")
+    reference_tuple = converter.parse(s, strict=False)
+    if reference_tuple is not None:
+        return reference_tuple.to_pydantic()
+    return None
