@@ -15,11 +15,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
 
+import curies
+from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    import curies
-
     from .standardized import StandardizedGraph
 
 __all__ = [
@@ -29,7 +29,9 @@ __all__ = [
     "GraphDocument",
     "Meta",
     "Node",
+    "NodeType",
     "Property",
+    "PropertyType",
     "Synonym",
     "Xref",
     "read",
@@ -40,24 +42,12 @@ logger = logging.getLogger(__name__)
 OBO_URI_PREFIX = "http://purl.obolibrary.org/obo/"
 OBO_URI_PREFIX_LEN = len(OBO_URI_PREFIX)
 
-SynonymPredicate: TypeAlias = Literal[
-    "hasExactSynonym",
-    "hasBroadSynonym",
-    "hasNarrowSynonym",
-    "hasRelatedSynonym",
-]
 NodeType: TypeAlias = Literal["CLASS", "PROPERTY", "INDIVIDUAL"]
 
-TimeoutHint = int | float | None
+#: When node type is ``PROPERTY``, this is extra information
+PropertyType: TypeAlias = Literal["ANNOTATION", "OBJECT", "DATA"]
 
-#: A mapping from OBO flat file format internal synonym types to OBO in OWL vocabulary
-#: identifiers. See https://owlcollab.github.io/oboformat/doc/GO.format.obo-1_4.html
-OBO_SYNONYM_TO_OIO: dict[str, SynonymPredicate] = {
-    "EXACT": "hasExactSynonym",
-    "BROAD": "hasBroadSynonym",
-    "NARROW": "hasNarrowSynonym",
-    "RELATED": "hasRelatedSynonym",
-}
+TimeoutHint = int | float | None
 
 
 class Property(BaseModel):
@@ -91,7 +81,7 @@ class Synonym(BaseModel):
     """Represents a synonym inside an object meta."""
 
     val: str | None = Field(default=None)
-    pred: str = Field(default="hasExactSynonym")
+    pred: SynonymScopeOIO = Field(default="hasExactSynonym")
     synonymType: str | None = Field(None, examples=["OMO:0003000"])  # noqa:N815
     xrefs: list[str] = Field(
         default_factory=list,
@@ -129,6 +119,9 @@ class Node(BaseModel):
     lbl: str | None = Field(None, description="The name of the node")
     meta: Meta | None = None
     type: NodeType | None = Field(None, description="Type of node")
+    propertyType: PropertyType | None = Field(  # noqa:N815
+        None, description="Type of property, if the node type is a property"
+    )
 
 
 class Graph(BaseModel):

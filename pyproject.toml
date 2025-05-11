@@ -50,7 +50,7 @@ license-files = [
 requires-python = ">=3.10"
 dependencies = [
     "pydantic",
-    "curies>=0.10.7",
+    "curies>=0.10.18",
     "typing-extensions",
 ]
 

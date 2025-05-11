@@ -1,10 +1,24 @@
 """A python data model for OBO Graphs."""
 
-from .model import Graph, GraphDocument, Meta, Node, NodeType, Property, Synonym, Xref, read
+from .model import (
+    Definition,
+    Edge,
+    Graph,
+    GraphDocument,
+    Meta,
+    Node,
+    NodeType,
+    Property,
+    PropertyType,
+    Synonym,
+    Xref,
+    read,
+)
 from .standardized import (
     StandardizedDefinition,
     StandardizedEdge,
     StandardizedGraph,
+    StandardizedGraphDocument,
     StandardizedMeta,
     StandardizedNode,
     StandardizedProperty,
@@ -13,15 +27,19 @@ from .standardized import (
 )
 
 __all__ = [
+    "Definition",
+    "Edge",
     "Graph",
     "GraphDocument",
     "Meta",
     "Node",
     "NodeType",
     "Property",
+    "PropertyType",
     "StandardizedDefinition",
     "StandardizedEdge",
     "StandardizedGraph",
+    "StandardizedGraphDocument",
     "StandardizedMeta",
     "StandardizedNode",
     "StandardizedProperty",
