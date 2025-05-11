@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, cast
 
 from curies import Converter, Reference, Triple, vocabulary
@@ -13,26 +13,37 @@ from typing_extensions import Self
 
 from obographs.model import (
     Definition,
+    DomainRangeAxiom,
     Edge,
+    EquivalentNodeSet,
+    ExistentialRestrictionExpression,
     Graph,
     GraphDocument,
+    LogicalDefinition,
     Meta,
     Node,
     NodeType,
     Property,
+    PropertyChainAxiom,
     PropertyType,
     Synonym,
     Xref,
 )
 
 __all__ = [
+    "StandardizedBaseModel",
     "StandardizedDefinition",
+    "StandardizedDomainRangeAxiom",
     "StandardizedEdge",
+    "StandardizedEquivalentNodeSet",
+    "StandardizedExistentialRestriction",
     "StandardizedGraph",
     "StandardizedGraphDocument",
+    "StandardizedLogicalDefinition",
     "StandardizedMeta",
     "StandardizedNode",
     "StandardizedProperty",
+    "StandardizedPropertyChainAxiom",
     "StandardizedSynonym",
     "StandardizedXref",
 ]
@@ -49,12 +60,14 @@ def _expand_list(references: list[Reference] | None, converter: Converter) -> li
 X = TypeVar("X")
 
 
-class StandardizedBaseModel(BaseModel, Generic[X]):
+class StandardizedBaseModel(BaseModel, ABC, Generic[X]):
     """A standardized property."""
 
     @classmethod
     @abstractmethod
-    def from_obograph_raw(cls, obj: X, converter: Converter) -> Self | None:
+    def from_obograph_raw(
+        cls, obj: X, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
         raise NotImplementedError
 
@@ -75,19 +88,25 @@ class StandardizedProperty(StandardizedBaseModel[Property]):
     meta: StandardizedMeta | None = None
 
     @classmethod
-    def from_obograph_raw(cls, prop: Property, converter: Converter) -> Self:
+    def from_obograph_raw(
+        cls, prop: Property, converter: Converter, *, strict: bool = False
+    ) -> Self:
         """Instantiate by standardizing a raw OBO Graph object."""
         if not prop.val or not prop.pred:
             raise ValueError
         value: Reference | str | None
-        if not prop.val.startswith("http://") and not prop.val.startswith("https"):
-            value = _curie_or_uri_to_ref(prop.val, converter)
+
+        if (
+            prop.val.startswith("http://")
+            or prop.val.startswith("https")
+            or converter.is_curie(prop.val)
+            or prop.val in BUILTINS
+        ):
+            value = _curie_or_uri_to_ref(prop.val, converter, strict=False) or prop.val
         else:
             value = prop.val
-        if value is None:
-            raise ValueError
         return cls(
-            predicate=_curie_or_uri_to_ref(prop.pred, converter),
+            predicate=_curie_or_uri_to_ref(prop.pred, converter, strict=strict),
             value=value,
         )
 
@@ -95,7 +114,9 @@ class StandardizedProperty(StandardizedBaseModel[Property]):
         """Create a raw object."""
         return Property(
             pred=converter.expand_reference(self.predicate),
-            val=self.value,
+            val=converter.expand_reference(self.value)
+            if isinstance(self.value, Reference)
+            else self.value,
             xrefs=_expand_list(self.xrefs, converter),
             meta=self.meta.to_raw(converter) if self.meta is not None else None,
         )
@@ -108,13 +129,15 @@ class StandardizedDefinition(StandardizedBaseModel[Definition]):
     xrefs: list[Reference] | None = Field(default=None)
 
     @classmethod
-    def from_obograph_raw(cls, definition: Definition | None, converter: Converter) -> Self | None:
-        """Instantiate by standardizing a raw OBO Graph object."""
+    def from_obograph_raw(
+        cls, definition: Definition | None, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
+        """Parse a raw object."""
         if definition is None:
             return None
         return cls(
             value=definition.val,
-            xrefs=_parse_list(definition.xrefs, converter),
+            xrefs=_parse_list(definition.xrefs, converter, strict=strict),
         )
 
     def to_raw(self, converter: Converter) -> Definition:
@@ -131,13 +154,16 @@ class StandardizedXref(StandardizedBaseModel[Xref]):
     reference: Reference
 
     @classmethod
-    def from_obograph_raw(cls, xref: Xref, converter: Converter) -> Self:
+    def from_obograph_raw(cls, xref: Xref, converter: Converter, *, strict: bool = False) -> Self:
         """Instantiate by standardizing a raw OBO Graph object."""
-        return cls(reference=_curie_or_uri_to_ref(xref.val, converter))
+        reference = _curie_or_uri_to_ref(xref.val, converter, strict=strict)
+        if reference is None:
+            raise ValueError(f"could not parse xref: {xref.val}")
+        return cls(reference=reference)
 
     def to_raw(self, converter: Converter) -> Xref:
         """Create a raw object."""
-        return Xref(val=converter.expand_reference(self.reference))
+        return Xref(val=self.reference.curie)
 
 
 class StandardizedSynonym(StandardizedBaseModel[Synonym]):
@@ -149,13 +175,16 @@ class StandardizedSynonym(StandardizedBaseModel[Synonym]):
     xrefs: list[Reference] | None = None
 
     @classmethod
-    def from_obograph_raw(cls, synonym: Synonym, converter: Converter) -> Self:
+    def from_obograph_raw(
+        cls, synonym: Synonym, converter: Converter, *, strict: bool = False
+    ) -> Self:
         """Instantiate by standardizing a raw OBO Graph object."""
         return cls(
             text=synonym.val,
             predicate=Reference(prefix="oboInOwl", identifier=synonym.pred),
-            type=synonym.synonymType and _curie_or_uri_to_ref(synonym.synonymType, converter),
-            xrefs=_parse_list(synonym.xrefs, converter),
+            type=synonym.synonymType
+            and _curie_or_uri_to_ref(synonym.synonymType, converter, strict=strict),
+            xrefs=_parse_list(synonym.xrefs, converter, strict=strict),
         )
 
     def to_raw(self, converter: Converter) -> Synonym:
@@ -184,7 +213,7 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
 
     @classmethod
     def from_obograph_raw(  # noqa:C901
-        cls, meta: Meta | None, converter: Converter, flag: str = ""
+        cls, meta: Meta | None, converter: Converter, flag: str = "", strict: bool = False
     ) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
         if meta is None:
@@ -194,8 +223,10 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
         for raw_xref in meta.xrefs or []:
             if raw_xref.val:
                 try:
-                    st_xref = StandardizedXref.from_obograph_raw(raw_xref, converter)
+                    st_xref = StandardizedXref.from_obograph_raw(raw_xref, converter, strict=strict)
                 except ValueError:
+                    if strict:
+                        raise
                     logger.debug("[%s] failed to standardize xref: %s", flag, raw_xref)
                 else:
                     xrefs.append(st_xref)
@@ -204,8 +235,10 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
         for raw_synonym in meta.synonyms or []:
             if raw_synonym.val:
                 try:
-                    s = StandardizedSynonym.from_obograph_raw(raw_synonym, converter)
+                    s = StandardizedSynonym.from_obograph_raw(raw_synonym, converter, strict=strict)
                 except ValueError:
+                    if strict:
+                        raise
                     logger.debug("[%s] failed to standardize synonym: %s", flag, raw_synonym)
                 else:
                     synonyms.append(s)
@@ -214,15 +247,23 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
         for raw_prop in meta.basicPropertyValues or []:
             if raw_prop.val and raw_prop.pred:
                 try:
-                    prop = StandardizedProperty.from_obograph_raw(raw_prop, converter)
+                    prop = StandardizedProperty.from_obograph_raw(
+                        raw_prop, converter, strict=strict
+                    )
                 except ValueError:
+                    if strict:
+                        raise
                     logger.debug("[%s] failed to standardize property: %s", flag, raw_prop)
                 else:
                     props.append(prop)
 
         return cls(
-            definition=StandardizedDefinition.from_obograph_raw(meta.definition, converter),
-            subsets=[_curie_or_uri_to_ref(subset, converter) for subset in meta.subsets]
+            definition=StandardizedDefinition.from_obograph_raw(
+                meta.definition, converter, strict=strict
+            ),
+            subsets=[
+                _curie_or_uri_to_ref(subset, converter, strict=strict) for subset in meta.subsets
+            ]
             if meta.subsets
             else None,
             xrefs=xrefs or None,
@@ -240,9 +281,7 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
             if self.definition and self.definition.value
             else None,
             subsets=_expand_list(self.subsets, converter),
-            xrefs=[Xref(val=converter.expand_reference(xref.reference)) for xref in self.xrefs]
-            if self.xrefs
-            else None,
+            xrefs=[xref.to_raw(converter) for xref in self.xrefs] if self.xrefs else None,
             synonyms=[s.to_raw(converter) for s in self.synonyms] if self.synonyms else None,
             comments=self.comments,
             version=self.version,  # TODO might need some kind of expansion?
@@ -265,16 +304,23 @@ class StandardizedNode(StandardizedBaseModel[Node]):
     )
 
     @classmethod
-    def from_obograph_raw(cls, node: Node, converter: Converter) -> Self | None:
+    def from_obograph_raw(
+        cls, node: Node, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
-        reference = _curie_or_uri_to_ref(node.id, converter)
+        reference = _curie_or_uri_to_ref(node.id, converter, strict=strict)
         if reference is None:
+            if strict:
+                raise ValueError(f"failed to parse node's ID: {node.id}")
             logger.warning("failed to parse node's ID %s", node.id)
             return None
+
         return cls(
             reference=reference,
             label=node.lbl,
-            meta=StandardizedMeta.from_obograph_raw(node.meta, converter, flag=reference.curie),
+            meta=StandardizedMeta.from_obograph_raw(
+                node.meta, converter, flag=reference.curie, strict=strict
+            ),
             type=node.type,
             property_type=node.propertyType,
         )
@@ -299,18 +345,26 @@ class StandardizedEdge(Triple, StandardizedBaseModel[Edge]):
     meta: StandardizedMeta | None = None
 
     @classmethod
-    def from_obograph_raw(cls, edge: Edge, converter: Converter) -> Self | None:
+    def from_obograph_raw(
+        cls, edge: Edge, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
         """Instantiate by standardizing a raw OBO Graph object."""
-        subject = _curie_or_uri_to_ref(edge.sub, converter)
+        subject = _curie_or_uri_to_ref(edge.sub, converter, strict=strict)
         if not subject:
+            if strict:
+                raise ValueError
             logger.warning("failed to parse edge's subject %s", edge.sub)
             return None
-        predicate = _curie_or_uri_to_ref(edge.pred, converter)
+        predicate = _curie_or_uri_to_ref(edge.pred, converter, strict=strict)
         if not predicate:
+            if strict:
+                raise ValueError
             logger.warning("failed to parse edge's predicate %s", edge.pred)
             return None
-        obj = _curie_or_uri_to_ref(edge.obj, converter)
+        obj = _curie_or_uri_to_ref(edge.obj, converter, strict=strict)
         if not obj:
+            if strict:
+                raise ValueError
             logger.warning("failed to parse edge's object %s", edge.obj)
             return None
         return cls(
@@ -318,7 +372,10 @@ class StandardizedEdge(Triple, StandardizedBaseModel[Edge]):
             predicate=predicate,
             object=obj,
             meta=StandardizedMeta.from_obograph_raw(
-                edge.meta, converter, flag=f"{subject.curie} {predicate.curie} {obj.curie}"
+                edge.meta,
+                converter,
+                flag=f"{subject.curie} {predicate.curie} {obj.curie}",
+                strict=strict,
             ),
         )
 
@@ -337,6 +394,95 @@ class StandardizedEdge(Triple, StandardizedBaseModel[Edge]):
         )
 
 
+class StandardizedDomainRangeAxiom(StandardizedBaseModel[DomainRangeAxiom]):
+    """Represents a domain/range axiom."""
+
+    predicate: Reference
+    domains: list[Reference] = Field(default_factory=list)
+    ranges: list[Reference] = Field(default_factory=list)
+    all_values_from_edges: list[StandardizedEdge] = Field(default_factory=list)
+    meta: StandardizedMeta | None = None
+
+    @classmethod
+    def from_obograph_raw(
+        cls, obj: DomainRangeAxiom, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
+        """Parse a raw object."""
+        return cls(
+            predicate=_curie_or_uri_to_ref(obj.predicateId, converter, strict=strict),
+            domains=_parse_list(obj.domainClassIds, converter, strict=strict) or [],
+            ranges=_parse_list(obj.rangeClassIds, converter, strict=strict) or [],
+            all_values_from_edges=[
+                StandardizedEdge.from_obograph_raw(edge, converter, strict=strict)
+                for edge in obj.allValuesFromEdges or []
+            ],
+            meta=StandardizedMeta.from_obograph_raw(obj.meta, converter, strict=strict),
+        )
+
+    def to_raw(self, converter: Converter) -> DomainRangeAxiom:
+        """Create a raw object."""
+        return DomainRangeAxiom(
+            predicateId=converter.expand_reference(self.predicate),
+            domainClassIds=_expand_list(self.domains, converter),
+            rangeClassIds=_expand_list(self.ranges, converter),
+            allValuesFromEdges=[edge.to_raw(converter) for edge in self.all_values_from_edges]
+            if self.all_values_from_edges
+            else None,
+            meta=self.meta.to_raw(converter) if self.meta is not None else None,
+        )
+
+
+class StandardizedPropertyChainAxiom(StandardizedBaseModel[PropertyChainAxiom]):
+    """Represents a property chain axiom."""
+
+    predicate: Reference
+    chain: list[Reference] = Field(default_factory=list)
+    meta: StandardizedMeta | None = None
+
+    @classmethod
+    def from_obograph_raw(
+        cls, obj: PropertyChainAxiom, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
+        """Parse a raw object."""
+        return cls(
+            predicate=_curie_or_uri_to_ref(obj.predicateId, converter, strict=strict),
+            chain=_parse_list(obj.chainPredicateIds, converter, strict=strict),
+            meta=StandardizedMeta.from_obograph_raw(obj.meta, converter, strict=strict),
+        )
+
+    def to_raw(self, converter: Converter) -> PropertyChainAxiom:
+        """Create a raw object."""
+        return PropertyChainAxiom(
+            predicateId=converter.expand_reference(self.predicate),
+            chainPredicateIds=_expand_list(self.chain, converter),
+            meta=self.meta.to_raw(converter) if self.meta is not None else None,
+        )
+
+
+class StandardizedEquivalentNodeSet(StandardizedBaseModel[EquivalentNodeSet]):
+    """Represents an equivalence set."""
+
+    node: Reference
+    equivalents: list[Reference] = Field(default_factory=list)
+    meta: StandardizedMeta | None = None
+
+
+class StandardizedExistentialRestriction(StandardizedBaseModel[ExistentialRestrictionExpression]):
+    """Represents an existential restriction expression."""
+
+    predicate: Reference
+    target: Reference
+
+
+class StandardizedLogicalDefinition(StandardizedBaseModel[LogicalDefinition]):
+    """Represents a logical definition axiom."""
+
+    node: Reference
+    geni: list[Reference] = Field(default_factory=list)
+    restrictions: list[StandardizedExistentialRestriction] = Field(default_factory=list)
+    meta: StandardizedMeta | None = None
+
+
 class StandardizedGraph(StandardizedBaseModel[Graph]):
     """A standardized graph."""
 
@@ -345,38 +491,60 @@ class StandardizedGraph(StandardizedBaseModel[Graph]):
     nodes: list[StandardizedNode] = Field(default_factory=list)
     edges: list[StandardizedEdge] = Field(default_factory=list)
 
-    # TODO other bits
-    # equivalentNodesSets
-    # logicalDefinitionAxioms
-    # domainRangeAxioms
-    # propertyChainAxioms
+    equivalent_node_sets: list[StandardizedEquivalentNodeSet] = Field(default_factory=list)
+    logical_definition_axioms: list[StandardizedLogicalDefinition] = Field(default_factory=list)
+    domain_range_axioms: list[StandardizedDomainRangeAxiom] = Field(default_factory=list)
+    property_chain_axioms: list[StandardizedPropertyChainAxiom] = Field(default_factory=list)
 
     @classmethod
-    def from_obograph_raw(cls, graph: Graph, converter: Converter) -> Self:
+    def from_obograph_raw(cls, graph: Graph, converter: Converter, *, strict: bool = False) -> Self:
         """Instantiate by standardizing a raw OBO Graph object."""
         return cls(
             id=graph.id,
-            meta=StandardizedMeta.from_obograph_raw(graph.meta, converter, flag=graph.id or ""),
+            meta=StandardizedMeta.from_obograph_raw(
+                graph.meta, converter, flag=graph.id or "", strict=strict
+            ),
             nodes=[
                 s_node
                 for node in graph.nodes
-                if (s_node := StandardizedNode.from_obograph_raw(node, converter))
+                if (s_node := StandardizedNode.from_obograph_raw(node, converter, strict=strict))
             ],
             edges=[
                 s_edge
                 for edge in graph.edges
-                if (s_edge := StandardizedEdge.from_obograph_raw(edge, converter))
+                if (s_edge := StandardizedEdge.from_obograph_raw(edge, converter, strict=strict))
+            ],
+            equivalent_node_sets=[
+                StandardizedEquivalentNodeSet.from_obograph_raw(e, converter, strict=strict)
+                for e in graph.equivalentNodesSets or []
+            ],
+            logical_definition_axioms=[
+                StandardizedLogicalDefinition.from_obograph_raw(e, converter, strict=strict)
+                for e in graph.logicalDefinitionAxioms or []
+            ],
+            property_chain_axioms=[
+                StandardizedPropertyChainAxiom.from_obograph_raw(e, converter, strict=strict)
+                for e in graph.propertyChainAxioms or []
+            ],
+            domain_range_axioms=[
+                StandardizedDomainRangeAxiom.from_obograph_raw(e, converter, strict=strict)
+                for e in graph.domainRangeAxioms or []
             ],
         )
 
     def to_raw(self, converter: Converter) -> Graph:
         """Create a raw object."""
         return Graph(
-            id=...,
+            id=self.id,
             meta=self.meta.to_raw(converter) if self.meta is not None else None,
             nodes=[node.to_raw(converter) for node in self.nodes],
             edges=[edge.to_raw(converter) for edge in self.edges],
-            # TODO other bits
+            logicalDefinitionAxioms=[
+                axiom.to_raw(converter) for axiom in self.logical_definition_axioms
+            ],
+            propertyChainAxioms=[axiom.to_raw(converter) for axiom in self.property_chain_axioms],
+            domainRangeAxioms=[axiom.to_raw(converter) for axiom in self.domain_range_axioms],
+            equivalentNodesSets=[axiom.to_raw(converter) for axiom in self.equivalent_node_sets],
         )
 
     def _get_property(self, predicate: Reference) -> str | Reference | None:
@@ -405,14 +573,16 @@ class StandardizedGraphDocument(StandardizedBaseModel[GraphDocument]):
     meta: StandardizedMeta | None = None
 
     @classmethod
-    def from_obograph_raw(cls, graph_document: GraphDocument, converter: Converter) -> Self:
+    def from_obograph_raw(
+        cls, graph_document: GraphDocument, converter: Converter, *, strict: bool = False
+    ) -> Self:
         """Instantiate by standardizing a raw OBO Graph Document object."""
         return cls(
             graphs=[
-                StandardizedGraph.from_obograph_raw(graph, converter)
+                StandardizedGraph.from_obograph_raw(graph, converter, strict=strict)
                 for graph in graph_document.graphs
             ],
-            meta=StandardizedMeta.from_obograph_raw(graph_document.meta, converter),
+            meta=StandardizedMeta.from_obograph_raw(graph_document.meta, converter, strict=strict),
         )
 
     def to_raw(self, converter: Converter) -> GraphDocument:
@@ -423,32 +593,43 @@ class StandardizedGraphDocument(StandardizedBaseModel[GraphDocument]):
         )
 
 
-def _parse_list(curie_or_uris: list[str] | None, converter: Converter) -> list[Reference] | None:
+def _parse_list(
+    curie_or_uris: list[str] | None, converter: Converter, *, strict: bool
+) -> list[Reference] | None:
     if not curie_or_uris:
         return None
     return [
         reference
         for curie_or_uri in curie_or_uris
-        if (reference := _curie_or_uri_to_ref(curie_or_uri, converter))
+        if (reference := _curie_or_uri_to_ref(curie_or_uri, converter, strict=strict))
     ]
 
 
 #: defined in https://github.com/geneontology/obographs/blob/6676b10a5cce04707d75b9dd46fa08de70322b0b/obographs-owlapi/src/main/java/org/geneontology/obographs/owlapi/FromOwl.java#L36-L39
 #: this list is complete.
-BUILTINS = {
+BUILTINS: dict[str, Reference] = {
     "is_a": vocabulary.is_a,
     "subPropertyOf": vocabulary.subproperty_of,
     "type": vocabulary.rdf_type,
     "inverseOf": Reference(prefix="owl", identifier="inverseOf"),
 }
 
-REVERSE_BUILTINS = {v: k for k, v in BUILTINS.items()}
+"""maybe add these later?
+    # predicates, see https://github.com/geneontology/obographs/blob/6676b10a5cce04707d75b9dd46fa08de70322b0b/obographs-core/src/test/java/org/geneontology/obographs/core/model/axiom/PropertyChainAxiomTest.java#L12-L14
+    # "part_of": vocabulary.part_of,
+    # "has_part": vocabulary.has_part,
+    # "overlaps": Reference(prefix="RO", identifier="0002131"),
+"""
+
+REVERSE_BUILTINS: dict[Reference, str] = {v: k for k, v in BUILTINS.items()}
 
 
-def _curie_or_uri_to_ref(s: str, converter: Converter) -> Reference | None:
+def _curie_or_uri_to_ref(s: str, converter: Converter, *, strict: bool) -> Reference | None:
     if s in BUILTINS:
         return BUILTINS[s]
     reference_tuple = converter.parse(s, strict=False)
     if reference_tuple is not None:
         return reference_tuple.to_pydantic()
+    if strict:
+        raise ValueError(f"could not parse {s}")
     return None
