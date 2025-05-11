@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 from curies import Converter, Reference, Triple, vocabulary
+from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
 from typing_extensions import Self
 
@@ -42,7 +43,7 @@ logger = logging.getLogger(__name__)
 def _expand_list(references: list[Reference] | None, converter: Converter) -> list[str] | None:
     if references is None or not references:
         return None
-    return [converter.expand_reference(r.pair, strict=True) for r in references]
+    return [converter.expand_reference(r, strict=True) for r in references]
 
 
 X = TypeVar("X")
@@ -93,7 +94,7 @@ class StandardizedProperty(StandardizedBaseModel[Property]):
     def to_raw(self, converter: Converter) -> Property:
         """Create a raw object."""
         return Property(
-            pred=converter.expand_reference(self.predicate.pair),
+            pred=converter.expand_reference(self.predicate),
             val=self.value,
             xrefs=_expand_list(self.xrefs, converter),
             meta=self.meta.to_raw(converter) if self.meta is not None else None,
@@ -136,7 +137,7 @@ class StandardizedXref(StandardizedBaseModel[Xref]):
 
     def to_raw(self, converter: Converter) -> Xref:
         """Create a raw object."""
-        return Xref(val=converter.expand_reference(self.reference.pair))
+        return Xref(val=converter.expand_reference(self.reference))
 
 
 class StandardizedSynonym(StandardizedBaseModel[Synonym]):
@@ -159,12 +160,12 @@ class StandardizedSynonym(StandardizedBaseModel[Synonym]):
 
     def to_raw(self, converter: Converter) -> Synonym:
         """Create a raw object."""
+        if self.predicate.prefix.lower() != "oboinowl":
+            raise ValueError
         return Synonym(
             val=self.text,
-            predicate=converter.expand_reference(self.predicate.pair),
-            synonymType=converter.expand_reference(self.type.pair)
-            if self.type is not None
-            else None,
+            pred=cast(SynonymScopeOIO, self.predicate.identifier),
+            synonymType=converter.expand_reference(self.type) if self.type is not None else None,
             xrefs=_expand_list(self.xrefs, converter),
         )
 
@@ -239,7 +240,9 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
             if self.definition and self.definition.value
             else None,
             subsets=_expand_list(self.subsets, converter),
-            xrefs=_expand_list(self.xrefs, converter),
+            xrefs=[Xref(val=converter.expand_reference(xref.reference)) for xref in self.xrefs]
+            if self.xrefs
+            else None,
             synonyms=[s.to_raw(converter) for s in self.synonyms] if self.synonyms else None,
             comments=self.comments,
             version=self.version,  # TODO might need some kind of expansion?
@@ -279,7 +282,7 @@ class StandardizedNode(StandardizedBaseModel[Node]):
     def to_raw(self, converter: Converter) -> Node:
         """Create a raw object."""
         return Node(
-            id=converter.expand_reference(self.reference.pair),
+            id=converter.expand_reference(self.reference),
             lbl=self.label,
             meta=self.meta.to_raw(converter) if self.meta is not None else None,
             type=self.type,
@@ -324,12 +327,12 @@ class StandardizedEdge(Triple, StandardizedBaseModel[Edge]):
         if self.predicate in REVERSE_BUILTINS:
             predicate = REVERSE_BUILTINS[self.predicate]
         else:
-            predicate = converter.expand_reference(self.predicate.pair, strict=True)
+            predicate = converter.expand_reference(self.predicate, strict=True)
 
         return Edge(
-            sub=converter.expand_reference(self.subject.pair),
+            sub=converter.expand_reference(self.subject),
             pred=predicate,
-            obj=converter.expand_reference(self.object.pair),
+            obj=converter.expand_reference(self.object),
             meta=self.meta.to_raw(converter) if self.meta is not None else None,
         )
 
