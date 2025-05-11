@@ -234,7 +234,20 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
 
     def to_raw(self, converter: Converter) -> Meta:
         """Create a raw object."""
-        raise NotImplementedError
+        return Meta(
+            definition=self.definition.to_raw(converter)
+            if self.definition and self.definition.value
+            else None,
+            subsets=_expand_list(self.subsets, converter),
+            xrefs=_expand_list(self.xrefs, converter),
+            synonyms=[s.to_raw(converter) for s in self.synonyms] if self.synonyms else None,
+            comments=self.comments,
+            version=self.version,  # TODO might need some kind of expansion?
+            deprecated=self.deprecated,
+            basicPropertyValues=[p.to_raw(converter) for p in self.properties]
+            if self.properties
+            else None,
+        )
 
 
 class StandardizedNode(StandardizedBaseModel[Node]):
