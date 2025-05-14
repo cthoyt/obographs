@@ -203,7 +203,7 @@ class StandardizedSynonym(StandardizedBaseModel[Synonym]):
 class StandardizedMeta(StandardizedBaseModel[Meta]):
     """A standardized meta object."""
 
-    definition: StandardizedDefinition | None
+    definition: StandardizedDefinition | None = None
     subsets: list[Reference] | None = None
     xrefs: list[StandardizedXref] | None = None
     synonyms: list[StandardizedSynonym] | None = None
@@ -261,7 +261,9 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
         return cls(
             definition=StandardizedDefinition.from_obograph_raw(
                 meta.definition, converter, strict=strict
-            ),
+            )
+            if meta.definition is not None
+            else None,
             subsets=[
                 _curie_or_uri_to_ref(subset, converter, strict=strict) for subset in meta.subsets
             ]
