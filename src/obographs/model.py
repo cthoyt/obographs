@@ -21,7 +21,7 @@ from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from .standardized import StandardizedGraph
+    from .standardized import StandardizedGraph, StandardizedGraphDocument
 
 __all__ = [
     "Definition",
@@ -197,6 +197,12 @@ class GraphDocument(BaseModel):
     graphs: list[Graph]
     meta: Meta | None = None
 
+    def standardize(self, converter: curies.Converter) -> StandardizedGraphDocument:
+        """Standardize the graph."""
+        from .standardized import StandardizedGraphDocument
+
+        return StandardizedGraphDocument.from_obograph_raw(self, converter)
+
 
 def get_id_to_node(graph: Graph) -> dict[str, Node]:
     """Get a dictionary from node ID to nodes."""
@@ -214,17 +220,19 @@ def get_id_to_edges(graph: Graph) -> dict[str, list[tuple[str, str]]]:
 # docstr-coverage:excused `overload`
 @overload
 def read(
-    source: str, *, timeout: TimeoutHint = ..., squeeze: Literal[False] = ...
+    source: str | Path, *, timeout: TimeoutHint = ..., squeeze: Literal[False] = ...
 ) -> GraphDocument: ...
 
 
 # docstr-coverage:excused `overload`
 @overload
-def read(source: str, *, timeout: TimeoutHint = ..., squeeze: Literal[True] = ...) -> Graph: ...
+def read(
+    source: str | Path, *, timeout: TimeoutHint = ..., squeeze: Literal[True] = ...
+) -> Graph: ...
 
 
 def read(
-    source: str, *, timeout: TimeoutHint = None, squeeze: bool = True
+    source: str | Path, *, timeout: TimeoutHint = None, squeeze: bool = True
 ) -> Graph | GraphDocument:
     """Read an OBO Graph document.
 
@@ -239,7 +247,7 @@ def read(
 
     :raises ValueError: If squeeze is set to true and multiple graphs are received
     """
-    if (isinstance(source, str) and source.startswith("https://")) or source.startswith("http://"):
+    if isinstance(source, str) and (source.startswith("https://") or source.startswith("http://")):
         import requests
 
         if source.endswith(".gz"):
