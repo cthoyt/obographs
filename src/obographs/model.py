@@ -9,27 +9,35 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
+from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 
+import curies
+from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    import curies
-
     from .standardized import StandardizedGraph
 
 __all__ = [
     "Definition",
+    "DomainRangeAxiom",
     "Edge",
+    "EquivalentNodeSet",
+    "ExistentialRestrictionExpression",
     "Graph",
     "GraphDocument",
+    "LogicalDefinition",
     "Meta",
     "Node",
+    "NodeType",
     "Property",
+    "PropertyChainAxiom",
+    "PropertyType",
     "Synonym",
     "Xref",
     "read",
@@ -40,24 +48,12 @@ logger = logging.getLogger(__name__)
 OBO_URI_PREFIX = "http://purl.obolibrary.org/obo/"
 OBO_URI_PREFIX_LEN = len(OBO_URI_PREFIX)
 
-SynonymPredicate: TypeAlias = Literal[
-    "hasExactSynonym",
-    "hasBroadSynonym",
-    "hasNarrowSynonym",
-    "hasRelatedSynonym",
-]
 NodeType: TypeAlias = Literal["CLASS", "PROPERTY", "INDIVIDUAL"]
 
-TimeoutHint = int | float | None
+#: When node type is ``PROPERTY``, this is extra information
+PropertyType: TypeAlias = Literal["ANNOTATION", "OBJECT", "DATA"]
 
-#: A mapping from OBO flat file format internal synonym types to OBO in OWL vocabulary
-#: identifiers. See https://owlcollab.github.io/oboformat/doc/GO.format.obo-1_4.html
-OBO_SYNONYM_TO_OIO: dict[str, SynonymPredicate] = {
-    "EXACT": "hasExactSynonym",
-    "BROAD": "hasBroadSynonym",
-    "NARROW": "hasNarrowSynonym",
-    "RELATED": "hasRelatedSynonym",
-}
+TimeoutHint = int | float | None
 
 
 class Property(BaseModel):
@@ -91,7 +87,7 @@ class Synonym(BaseModel):
     """Represents a synonym inside an object meta."""
 
     val: str | None = Field(default=None)
-    pred: str = Field(default="hasExactSynonym")
+    pred: SynonymScopeOIO = Field(default="hasExactSynonym")
     synonymType: str | None = Field(None, examples=["OMO:0003000"])  # noqa:N815
     xrefs: list[str] = Field(
         default_factory=list,
@@ -129,6 +125,51 @@ class Node(BaseModel):
     lbl: str | None = Field(None, description="The name of the node")
     meta: Meta | None = None
     type: NodeType | None = Field(None, description="Type of node")
+    propertyType: PropertyType | None = Field(  # noqa:N815
+        None, description="Type of property, if the node type is a property"
+    )
+
+
+class DomainRangeAxiom(BaseModel):
+    """Represents a domain/range axiom."""
+
+    predicateId: str  # noqa:N815
+    domainClassIds: list[str] | None = None  # noqa:N815
+    rangeClassIds: list[str] | None = None  # noqa:N815
+    allValuesFromEdges: list[Edge] | None = None  # noqa:N815
+    meta: Meta | None = None
+
+
+class PropertyChainAxiom(BaseModel):
+    """Represents a property chain axiom."""
+
+    predicateId: str  # noqa:N815
+    chainPredicateIds: list[str]  # noqa:N815
+    meta: Meta | None = None
+
+
+class ExistentialRestrictionExpression(BaseModel):
+    """Represents an existential restriction."""
+
+    propertyId: str  # noqa:N815
+    fillerId: str  # noqa:N815
+
+
+class LogicalDefinition(BaseModel):
+    """Represents a logical definition chain axiom."""
+
+    definedClassId: str  # noqa:N815
+    genusIds: list[str] | None = None  # noqa:N815
+    restrictions: list[ExistentialRestrictionExpression] | None = None
+    meta: Meta | None = None
+
+
+class EquivalentNodeSet(BaseModel):
+    """Represents a set of equivalent nodes."""
+
+    representativeNodeId: str  # noqa:N815
+    nodeIds: list[str]  # noqa:N815
+    meta: Meta | None = None
 
 
 class Graph(BaseModel):
@@ -138,10 +179,10 @@ class Graph(BaseModel):
     meta: Meta | None = None
     nodes: list[Node] = Field(default_factory=list)
     edges: list[Edge] = Field(default_factory=list)
-    equivalentNodesSets: list[Any] = Field(default_factory=list)  # noqa:N815
-    logicalDefinitionAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
-    domainRangeAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
-    propertyChainAxioms: list[Any] = Field(default_factory=list)  # noqa:N815
+    equivalentNodesSets: list[EquivalentNodeSet] = Field(default_factory=list)  # noqa:N815
+    logicalDefinitionAxioms: list[LogicalDefinition] = Field(default_factory=list)  # noqa:N815
+    domainRangeAxioms: list[DomainRangeAxiom] = Field(default_factory=list)  # noqa:N815
+    propertyChainAxioms: list[PropertyChainAxiom] = Field(default_factory=list)  # noqa:N815
 
     def standardize(self, converter: curies.Converter) -> StandardizedGraph:
         """Standardize the graph."""
@@ -210,12 +251,14 @@ def read(
 
     elif isinstance(source, str | Path):
         path = Path(source).expanduser().resolve()
-        if path.is_file():
-            if path.suffix.endswith(".gz"):
-                raise NotImplementedError
-            else:
-                with path.open() as file:
-                    graph_document = GraphDocument.model_validate(json.load(file))
+        if not path.is_file():
+            raise FileNotFoundError
+        if path.suffix.endswith(".gz"):
+            with gzip.open(path, mode="rt") as file:
+                graph_document = GraphDocument.model_validate(json.load(file))
+        else:
+            with path.open() as file:
+                graph_document = GraphDocument.model_validate(json.load(file))
     else:
         raise TypeError(f"Unhandled source: {source}")
 
