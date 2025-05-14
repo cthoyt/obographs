@@ -6,6 +6,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, cast
 
+import curies.preprocessing
 from curies import Converter, Reference, Triple, vocabulary
 from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
@@ -195,7 +196,7 @@ class StandardizedSynonym(StandardizedBaseModel[Synonym]):
             val=self.text,
             pred=cast(SynonymScopeOIO, self.predicate.identifier),
             synonymType=converter.expand_reference(self.type) if self.type is not None else None,
-            xrefs=_expand_list(self.xrefs, converter),
+            xrefs=_expand_list(self.xrefs, converter) or [],
         )
 
 
@@ -466,12 +467,48 @@ class StandardizedEquivalentNodeSet(StandardizedBaseModel[EquivalentNodeSet]):
     equivalents: list[Reference] = Field(default_factory=list)
     meta: StandardizedMeta | None = None
 
+    @classmethod
+    def from_obograph_raw(
+        cls, obj: EquivalentNodeSet, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
+        """Parse a raw object."""
+        return cls(
+            node=_curie_or_uri_to_ref(obj.representativeNodeId, converter, strict=strict),
+            equivalents=_parse_list(obj.nodeIds, converter, strict=strict),
+            meta=StandardizedMeta.from_obograph_raw(obj.meta, converter, strict=strict),
+        )
+
+    def to_raw(self, converter: Converter) -> EquivalentNodeSet:
+        """Create a raw object."""
+        return EquivalentNodeSet(
+            representativeNodeId=converter.expand_reference(self.node),
+            nodeIds=_expand_list(self.equivalents, converter),
+            meta=self.meta.to_raw(converter) if self.meta is not None else None,
+        )
+
 
 class StandardizedExistentialRestriction(StandardizedBaseModel[ExistentialRestrictionExpression]):
     """Represents an existential restriction expression."""
 
     predicate: Reference
     target: Reference
+
+    @classmethod
+    def from_obograph_raw(
+        cls, obj: ExistentialRestrictionExpression, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
+        """Parse a raw object."""
+        return cls(
+            predicate=_curie_or_uri_to_ref(obj.propertyId, converter, strict=strict),
+            target=_curie_or_uri_to_ref(obj.fillerId, converter, strict=strict),
+        )
+
+    def to_raw(self, converter: Converter) -> ExistentialRestrictionExpression:
+        """Create a raw object."""
+        return ExistentialRestrictionExpression(
+            propertyId=converter.expand_reference(self.predicate),
+            fillerId=converter.expand_reference(self.target),
+        )
 
 
 class StandardizedLogicalDefinition(StandardizedBaseModel[LogicalDefinition]):
@@ -481,6 +518,30 @@ class StandardizedLogicalDefinition(StandardizedBaseModel[LogicalDefinition]):
     geni: list[Reference] = Field(default_factory=list)
     restrictions: list[StandardizedExistentialRestriction] = Field(default_factory=list)
     meta: StandardizedMeta | None = None
+
+    @classmethod
+    def from_obograph_raw(
+        cls, obj: LogicalDefinition, converter: Converter, *, strict: bool = False
+    ) -> Self | None:
+        """Parse a raw object."""
+        return cls(
+            node=_curie_or_uri_to_ref(obj.definedClassId, converter, strict=strict),
+            geni=_parse_list(obj.genusIds, converter, strict=strict),
+            restrictions=[
+                StandardizedExistentialRestriction.from_obograph_raw(r, converter, strict=strict)
+                for r in obj.restrictions or []
+            ],
+            meta=StandardizedMeta.from_obograph_raw(obj.meta, converter, strict=strict),
+        )
+
+    def to_raw(self, converter: Converter) -> LogicalDefinition:
+        """Create a raw object."""
+        return LogicalDefinition(
+            definedClassId=converter.expand_reference(self.node),
+            genusIds=_expand_list(self.geni, converter),
+            restrictions=[r.to_raw(converter) for r in self.restrictions],
+            meta=self.meta.to_raw(converter) if self.meta is not None else None,
+        )
 
 
 class StandardizedGraph(StandardizedBaseModel[Graph]):
@@ -627,7 +688,10 @@ REVERSE_BUILTINS: dict[Reference, str] = {v: k for k, v in BUILTINS.items()}
 def _curie_or_uri_to_ref(s: str, converter: Converter, *, strict: bool) -> Reference | None:
     if s in BUILTINS:
         return BUILTINS[s]
-    reference_tuple = converter.parse(s, strict=False)
+    try:
+        reference_tuple = converter.parse(s, strict=False)
+    except curies.preprocessing.BlocklistError:
+        return None
     if reference_tuple is not None:
         return reference_tuple.to_pydantic()
     if strict:
