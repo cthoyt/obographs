@@ -184,11 +184,13 @@ class Graph(BaseModel):
     domainRangeAxioms: list[DomainRangeAxiom] = Field(default_factory=list)  # noqa:N815
     propertyChainAxioms: list[PropertyChainAxiom] = Field(default_factory=list)  # noqa:N815
 
-    def standardize(self, converter: curies.Converter) -> StandardizedGraph:
+    def standardize(
+        self, converter: curies.Converter, *, strict: bool = False
+    ) -> StandardizedGraph:
         """Standardize the graph."""
         from .standardized import StandardizedGraph
 
-        return StandardizedGraph.from_obograph_raw(self, converter)
+        return StandardizedGraph.from_obograph_raw(self, converter, strict=strict)
 
 
 class GraphDocument(BaseModel):
