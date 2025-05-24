@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import overload
 
-import obographs
+from .model import Graph, GraphDocument
+from .standardized import StandardizedGraph, StandardizedGraphDocument
 
 __all__ = [
     "guess_primary_graph",
@@ -29,23 +30,23 @@ CANONICAL = {
 # docstr-coverage:excused `overload`
 @overload
 def guess_primary_graph(
-    graph_document: obographs.GraphDocument,
+    graph_document: GraphDocument,
     prefix: str,
-) -> obographs.Graph: ...
+) -> Graph: ...
 
 
 # docstr-coverage:excused `overload`
 @overload
 def guess_primary_graph(
-    graph_document: obographs.StandardizedGraphDocument,
+    graph_document: StandardizedGraphDocument,
     prefix: str,
-) -> obographs.StandardizedGraph: ...
+) -> StandardizedGraph: ...
 
 
 def guess_primary_graph(
-    graph_document: obographs.GraphDocument | obographs.StandardizedGraphDocument,
+    graph_document: GraphDocument | StandardizedGraphDocument,
     prefix: str,
-) -> obographs.Graph | obographs.StandardizedGraph:
+) -> Graph | StandardizedGraph:
     """Guess the primary graph from a graph document."""
     if 1 == len(graph_document.graphs):
         return graph_document.graphs[0]
