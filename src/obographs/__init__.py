@@ -1,5 +1,6 @@
 """A python data model for OBO Graphs."""
 
+from .contrib import guess_primary_graph
 from .model import (
     Definition,
     DomainRangeAxiom,
@@ -69,5 +70,6 @@ __all__ = [
     "StandardizedXref",
     "Synonym",
     "Xref",
+    "guess_primary_graph",
     "read",
 ]
