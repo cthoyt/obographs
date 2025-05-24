@@ -48,8 +48,11 @@ def guess_primary_graph(
     prefix: str,
 ) -> Graph | StandardizedGraph:
     """Guess the primary graph from a graph document."""
-    if 1 == len(graph_document.graphs):
+    if 0 == len(graph_document.graphs):
+        raise ValueError("Could not automatically identify the primary graph from empty list")
+    elif 1 == len(graph_document.graphs):
         return graph_document.graphs[0]
+
     id_to_graph = {graph.id: graph for graph in graph_document.graphs if graph.id}
 
     # Check for standard construction of OBO PURLs
