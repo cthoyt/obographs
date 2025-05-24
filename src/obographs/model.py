@@ -184,6 +184,23 @@ class Graph(BaseModel):
     domainRangeAxioms: list[DomainRangeAxiom] = Field(default_factory=list)  # noqa:N815
     propertyChainAxioms: list[PropertyChainAxiom] = Field(default_factory=list)  # noqa:N815
 
+    def _get_property(self, predicate: str) -> str | None:
+        if self.meta is not None:
+            for prop in self.meta.basicPropertyValues or []:
+                if prop.pred == predicate and prop.val:
+                    return prop.val
+        return None
+
+    @property
+    def name(self) -> str | None:
+        """Get the title."""
+        return self._get_property("http://purl.org/dc/terms/title")
+
+    @property
+    def version(self) -> str | None:
+        """Get the version."""
+        return self._get_property("http://www.w3.org/2002/07/owl#versionInfo")
+
     def standardize(
         self, converter: curies.Converter, *, strict: bool = False
     ) -> StandardizedGraph:

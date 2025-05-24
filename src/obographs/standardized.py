@@ -8,7 +8,7 @@ from typing import Generic, TypeVar, cast
 
 import curies.preprocessing
 from curies import Converter, Reference, Triple, vocabulary
-from curies.vocabulary import SynonymScopeOIO
+from curies.vocabulary import SynonymScopeOIO, has_title, owl_version_info
 from pydantic import BaseModel, Field
 from typing_extensions import Self
 
@@ -209,7 +209,7 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
     synonyms: list[StandardizedSynonym] | None = None
     comments: list[str] | None = None
     deprecated: bool = False
-    version: str | None = None
+    version_iri: str | None = None
     properties: list[StandardizedProperty] | None = None
 
     @classmethod
@@ -272,7 +272,7 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
             xrefs=xrefs or None,
             synonyms=synonyms or None,
             comments=meta.comments,
-            version=meta.version,
+            version_iri=meta.version,
             deprecated=meta.deprecated,
             properties=props or None,
         )
@@ -287,7 +287,7 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
             xrefs=[xref.to_raw(converter) for xref in self.xrefs] if self.xrefs else None,
             synonyms=[s.to_raw(converter) for s in self.synonyms] if self.synonyms else None,
             comments=self.comments,
-            version=self.version,  # TODO might need some kind of expansion?
+            version=self.version_iri,
             deprecated=self.deprecated,
             basicPropertyValues=[p.to_raw(converter) for p in self.properties]
             if self.properties
@@ -623,7 +623,15 @@ class StandardizedGraph(StandardizedBaseModel[Graph]):
     @property
     def name(self) -> str | None:
         """Look up the name of the graph."""
-        r = self._get_property(Reference(prefix="dcterms", identifier="title"))
+        r = self._get_property(has_title)
+        if isinstance(r, Reference):
+            raise TypeError
+        return r
+
+    @property
+    def version(self) -> str | None:
+        """Get the version."""
+        r = self._get_property(owl_version_info)
         if isinstance(r, Reference):
             raise TypeError
         return r
