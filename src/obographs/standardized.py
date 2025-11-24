@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from typing import Generic, TypeVar, cast
 
 import curies.preprocessing
@@ -411,8 +412,11 @@ class StandardizedDomainRangeAxiom(StandardizedBaseModel[DomainRangeAxiom]):
         cls, obj: DomainRangeAxiom, converter: Converter, *, strict: bool = False
     ) -> Self | None:
         """Parse a raw object."""
+        predicate = _curie_or_uri_to_ref(obj.predicateId, converter, strict=strict)
+        if predicate is None:
+            return None
         return cls(
-            predicate=_curie_or_uri_to_ref(obj.predicateId, converter, strict=strict),
+            predicate=predicate,
             domains=_parse_list(obj.domainClassIds, converter, strict=strict) or [],
             ranges=_parse_list(obj.rangeClassIds, converter, strict=strict) or [],
             all_values_from_edges=[
@@ -528,11 +532,11 @@ class StandardizedLogicalDefinition(StandardizedBaseModel[LogicalDefinition]):
         """Parse a raw object."""
         return cls(
             node=_curie_or_uri_to_ref(obj.definedClassId, converter, strict=strict),
-            geni=_parse_list(obj.genusIds, converter, strict=strict),
-            restrictions=[
+            geni=_parse_list(obj.genusIds, converter, strict=strict) or [],
+            restrictions=_schwoop(
                 StandardizedExistentialRestriction.from_obograph_raw(r, converter, strict=strict)
                 for r in obj.restrictions or []
-            ],
+            ),
             meta=StandardizedMeta.from_obograph_raw(obj.meta, converter, strict=strict),
         )
 
@@ -577,22 +581,22 @@ class StandardizedGraph(StandardizedBaseModel[Graph]):
                 for edge in graph.edges
                 if (s_edge := StandardizedEdge.from_obograph_raw(edge, converter, strict=strict))
             ],
-            equivalent_node_sets=[
+            equivalent_node_sets=_schwoop(
                 StandardizedEquivalentNodeSet.from_obograph_raw(e, converter, strict=strict)
                 for e in graph.equivalentNodesSets or []
-            ],
-            logical_definition_axioms=[
+            ),
+            logical_definition_axioms=_schwoop(
                 StandardizedLogicalDefinition.from_obograph_raw(e, converter, strict=strict)
                 for e in graph.logicalDefinitionAxioms or []
-            ],
-            property_chain_axioms=[
+            ),
+            property_chain_axioms=_schwoop(
                 StandardizedPropertyChainAxiom.from_obograph_raw(e, converter, strict=strict)
                 for e in graph.propertyChainAxioms or []
-            ],
-            domain_range_axioms=[
+            ),
+            domain_range_axioms=_schwoop(
                 StandardizedDomainRangeAxiom.from_obograph_raw(e, converter, strict=strict)
                 for e in graph.domainRangeAxioms or []
-            ],
+            ),
         )
 
     def to_raw(self, converter: Converter) -> Graph:
@@ -635,6 +639,10 @@ class StandardizedGraph(StandardizedBaseModel[Graph]):
         if isinstance(r, Reference):
             raise TypeError
         return r
+
+
+def _schwoop(x: Iterable[X | None]) -> list[X]:
+    return [y for y in x if y is not None]
 
 
 class StandardizedGraphDocument(StandardizedBaseModel[GraphDocument]):
