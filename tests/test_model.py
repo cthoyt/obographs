@@ -1,6 +1,8 @@
 """Test the data model."""
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from curies import (
     Converter,
@@ -10,16 +12,22 @@ from curies import (
     PreprocessingRewrites,
     PreprocessingRules,
 )
+from pystow.utils import download
 
 from obographs import GraphDocument, read
 from obographs.model import get_id_to_edges, get_id_to_node
 from obographs.standardized import StandardizedGraph, StandardizedGraphDocument
 
 
-def read_example(name: str) -> GraphDocument:
+def read_example(name: str, direct: bool = True) -> GraphDocument:
     """Read the example OBO Graph JSON document."""
     url = f"https://raw.githubusercontent.com/geneontology/obographs/refs/heads/master/examples/{name}.json"
-    return read(url, squeeze=False)
+    if direct:
+        return read(url, squeeze=False)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir).joinpath(f"{name}.json")
+        download(url=url, path=path)
+        return read(path, squeeze=False)
 
 
 SKIP_BECAUSE_DATA = unittest.skip(reason="test is failing for unrelated data reasons")
@@ -130,7 +138,8 @@ class TestModel(unittest.TestCase):
 
     def test_abox_roundtrip(self) -> None:
         """Test the example can go through a roundtrip."""
-        self.assert_example("abox")
+        self.assert_example("abox", direct=False)
+        self.assert_example("abox", direct=True)
 
     def test_basic_roundtrip(self) -> None:
         """Test the example can go through a roundtrip."""
@@ -164,9 +173,9 @@ class TestModel(unittest.TestCase):
         """Test the example can go through a roundtrip."""
         self.assert_example("equivNodeSetTest")
 
-    def assert_example(self, example: str) -> None:
+    def assert_example(self, example: str, *, direct: bool = True) -> None:
         """Assert that the example can go a round-trip."""
-        graph_document = read_example(example)
+        graph_document = read_example(example, direct=direct)
         st_graph_document = StandardizedGraphDocument.from_obograph_raw(
             graph_document,
             converter,

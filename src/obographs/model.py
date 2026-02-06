@@ -18,8 +18,7 @@ from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 import curies
 from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
-from pystow.utils import safe_open, download
-import tempfile
+from pystow.utils import safe_open
 
 if TYPE_CHECKING:
     from .standardized import StandardizedGraph, StandardizedGraphDocument
