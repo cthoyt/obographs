@@ -9,7 +9,6 @@
 
 from __future__ import annotations
 
-import gzip
 import json
 import logging
 from collections import defaultdict
@@ -19,6 +18,7 @@ from typing import TYPE_CHECKING, Literal, TypeAlias, overload
 import curies
 from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
+from pystow.utils import safe_open
 
 if TYPE_CHECKING:
     from .standardized import StandardizedGraph, StandardizedGraphDocument
@@ -263,7 +263,8 @@ def read(
     *,
     timeout: TimeoutHint = None,
     squeeze: bool = True,
-    encoding: str = "utf-8",
+    encoding: str | None = None,
+    newline: str | None = None,
 ) -> Graph | GraphDocument:
     """Read an OBO Graph document.
 
@@ -273,7 +274,10 @@ def read(
         only has a single graph and return a :class:`Graph` object. If `true` and
         multiple graphs are received, will raise an error. Set this to `false` to return
         a GraphDocument containing all graphs.
-    :param encoding: The encoding to use for reading the graph
+    :param encoding: The ``encoding`` when reading a local filepath, passed to
+        :func:`pystow.utils.safe_open`
+    :param newline: The ``newline`` when reading a local filepath, passed to
+        :func:`pystow.utils.safe_open`
 
     :returns: A graph or graph document
 
@@ -290,15 +294,8 @@ def read(
             graph_document = GraphDocument.model_validate(res_json)
 
     elif isinstance(source, str | Path):
-        path = Path(source).expanduser().resolve()
-        if not path.is_file():
-            raise FileNotFoundError
-        if path.suffix.endswith(".gz"):
-            with gzip.open(path, mode="rt", encoding=encoding) as file:
-                graph_document = GraphDocument.model_validate(json.load(file))
-        else:
-            with path.open(mode="rt", encoding=encoding) as file:
-                graph_document = GraphDocument.model_validate(json.load(file))
+        with safe_open(source, encoding=encoding, newline=newline) as file:
+            graph_document = GraphDocument.model_validate(json.load(file))
     else:
         raise TypeError(f"Unhandled source: {source}")
 
