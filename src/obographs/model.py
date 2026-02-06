@@ -274,7 +274,10 @@ def read(
         only has a single graph and return a :class:`Graph` object. If `true` and
         multiple graphs are received, will raise an error. Set this to `false` to return
         a GraphDocument containing all graphs.
-    :param encoding: The encoding to use for reading the graph
+    :param encoding: The ``encoding`` when reading a local filepath, passed to
+        :func:`pystow.utils.safe_open`
+    :param newline: The ``newline`` when reading a local filepath, passed to
+        :func:`pystow.utils.safe_open`
 
     :returns: A graph or graph document
 
