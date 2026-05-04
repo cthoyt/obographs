@@ -259,17 +259,15 @@ class StandardizedMeta(StandardizedBaseModel[Meta]):
                 else:
                     props.append(prop)
 
+        subsets = _parse_list(meta.subsets, converter, strict=strict)
+
         return cls(
             definition=StandardizedDefinition.from_obograph_raw(
                 meta.definition, converter, strict=strict
             )
             if meta.definition is not None
             else None,
-            subsets=[
-                _curie_or_uri_to_ref(subset, converter, strict=strict) for subset in meta.subsets
-            ]
-            if meta.subsets
-            else None,
+            subsets=subsets or None,
             xrefs=xrefs or None,
             synonyms=synonyms or None,
             comments=meta.comments,
@@ -530,8 +528,11 @@ class StandardizedLogicalDefinition(StandardizedBaseModel[LogicalDefinition]):
         cls, obj: LogicalDefinition, converter: Converter, *, strict: bool = False
     ) -> Self | None:
         """Parse a raw object."""
+        node = _curie_or_uri_to_ref(obj.definedClassId, converter, strict=strict)
+        if node is None:
+            return None
         return cls(
-            node=_curie_or_uri_to_ref(obj.definedClassId, converter, strict=strict),
+            node=node,
             geni=_parse_list(obj.genusIds, converter, strict=strict) or [],
             restrictions=_schwoop(
                 StandardizedExistentialRestriction.from_obograph_raw(r, converter, strict=strict)
@@ -641,8 +642,8 @@ class StandardizedGraph(StandardizedBaseModel[Graph]):
         return r
 
 
-def _schwoop(x: Iterable[X | None]) -> list[X]:
-    return [y for y in x if y is not None]
+def _schwoop(elements: Iterable[X | None]) -> list[X]:
+    return [element for element in elements if element is not None]
 
 
 class StandardizedGraphDocument(StandardizedBaseModel[GraphDocument]):
@@ -681,7 +682,7 @@ def _parse_list(
         reference
         for curie_or_uri in curie_or_uris
         if (reference := _curie_or_uri_to_ref(curie_or_uri, converter, strict=strict))
-    ]
+    ] or None
 
 
 #: defined in https://github.com/geneontology/obographs/blob/6676b10a5cce04707d75b9dd46fa08de70322b0b/obographs-owlapi/src/main/java/org/geneontology/obographs/owlapi/FromOwl.java#L36-L39
@@ -690,7 +691,7 @@ BUILTINS: dict[str, Reference] = {
     "is_a": vocabulary.is_a,
     "subPropertyOf": vocabulary.subproperty_of,
     "type": vocabulary.rdf_type,
-    "inverseOf": Reference(prefix="owl", identifier="inverseOf"),
+    "inverseOf": vocabulary.owl_inverse_of,
 }
 
 """maybe add these later?
