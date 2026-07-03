@@ -210,17 +210,18 @@ class Graph(BaseModel):
         """Get the license."""
         return self._get_property("http://purl.org/dc/terms/license")
 
-
     @property
     def version(self) -> str | None:
         """Get the version."""
         return self._get_property("http://www.w3.org/2002/07/owl#versionInfo")
 
-    # TODO which of these is in the graph metadata? I think self.meta.version is IRI
-
     @property
     def version_iri(self) -> str | None:
         """Get the version IRI of the ontology."""
+        if self.meta is None:
+            return None
+        if self.meta.version:
+            return self.meta.version
         return self._get_property("http://www.w3.org/2002/07/owl#versionIRI")
 
     @property
