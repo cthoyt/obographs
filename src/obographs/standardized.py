@@ -626,12 +626,17 @@ class StandardizedGraph(StandardizedBaseModel[Graph]):
         return None
 
     @property
-    def name(self) -> str | None:
-        """Look up the name of the graph."""
+    def title(self) -> str | None:
+        """Look up the title of the graph."""
         r = self._get_property(has_title)
         if isinstance(r, Reference):
             raise TypeError
         return r
+
+    @property
+    def name(self) -> str | None:
+        """Look up the name of the graph."""
+        return self.title
 
     @property
     def version(self) -> str | None:

@@ -203,12 +203,16 @@ class Graph(BaseModel):
     @property
     def name(self) -> str | None:
         """Get the title."""
-        return self._get_property("http://purl.org/dc/terms/title")
+        return self._get_property("http://purl.org/dc/terms/title") or self._get_property(
+            "http://purl.org/dc/elements/1.1/title"
+        )
 
     @property
     def license(self) -> str | None:
         """Get the license."""
-        return self._get_property("http://purl.org/dc/terms/license")
+        return self._get_property("http://purl.org/dc/terms/license") or self._get_property(
+            "http://purl.org/dc/elements/1.1/license"
+        )
 
     @property
     def version(self) -> str | None:
