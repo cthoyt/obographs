@@ -187,9 +187,18 @@ class Graph(BaseModel):
     def _get_property(self, predicate: str) -> str | None:
         if self.meta is not None:
             for prop in self.meta.basicPropertyValues or []:
-                if prop.pred == predicate and prop.val:
+                if prop.pred == predicate and prop.val is not None:
                     return prop.val
         return None
+
+    def _get_properties(self, predicate: str) -> list[str]:
+        if self.meta is None:
+            return []
+        return [
+            prop.val
+            for prop in self.meta.basicPropertyValues or []
+            if prop.pred == predicate and prop.val is not None
+        ]
 
     @property
     def name(self) -> str | None:
@@ -197,9 +206,33 @@ class Graph(BaseModel):
         return self._get_property("http://purl.org/dc/terms/title")
 
     @property
+    def license(self) -> str | None:
+        """Get the license."""
+        return self._get_property("http://purl.org/dc/terms/license")
+
+    @property
     def version(self) -> str | None:
         """Get the version."""
         return self._get_property("http://www.w3.org/2002/07/owl#versionInfo")
+
+    @property
+    def version_iri(self) -> str | None:
+        """Get the version IRI of the ontology."""
+        if self.meta is None:
+            return None
+        if self.meta.version:
+            return self.meta.version
+        return self._get_property("http://www.w3.org/2002/07/owl#versionIRI")
+
+    @property
+    def default_namespace(self) -> str | None:
+        """Get the default namespace of the ontology, if available."""
+        return self._get_property("http://www.geneontology.org/formats/oboInOwl#default-namespace")
+
+    @property
+    def roots(self) -> list[str]:
+        """Get the ontology root terms."""
+        return self._get_properties("http://purl.obolibrary.org/obo/IAO_0000700")
 
     def standardize(
         self, converter: curies.Converter, *, strict: bool = False
