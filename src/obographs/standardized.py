@@ -314,7 +314,7 @@ class StandardizedNode(StandardizedBaseModel[Node]):
         if reference is None:
             if strict:
                 raise ValueError(f"failed to parse node's ID: {node.id}")
-            logger.warning("failed to parse node's ID %s", node.id)
+            logger.debug("failed to parse node's ID %s", node.id)
             return None
 
         return cls(
@@ -355,19 +355,19 @@ class StandardizedEdge(Triple, StandardizedBaseModel[Edge]):
         if not subject:
             if strict:
                 raise ValueError
-            logger.warning("failed to parse edge's subject %s", edge.sub)
+            logger.debug("failed to parse edge's subject %s", edge.sub)
             return None
         predicate = _curie_or_uri_to_ref(edge.pred, converter, strict=strict)
         if not predicate:
             if strict:
                 raise ValueError
-            logger.warning("failed to parse edge's predicate %s", edge.pred)
+            logger.debug("failed to parse edge's predicate %s", edge.pred)
             return None
         obj = _curie_or_uri_to_ref(edge.obj, converter, strict=strict)
         if not obj:
             if strict:
                 raise ValueError
-            logger.warning("failed to parse edge's object %s", edge.obj)
+            logger.debug("failed to parse edge's object %s", edge.obj)
             return None
         return cls(
             subject=subject,
