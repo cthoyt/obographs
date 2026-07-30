@@ -60,7 +60,7 @@ def main() -> None:
                 click.style(f"[{resource.prefix}] failed to decode JSON from {url}", fg="red")
             )
             continue
-        except Exception as e:
+        except Exception as e:  # noqa:BLE001
             tqdm.write(
                 click.style(f"[{resource.prefix}] failed to read from {url} - {e}", fg="red")
             )
@@ -68,7 +68,7 @@ def main() -> None:
             continue
         try:
             graph = graph_raw.standardize(converter)
-        except Exception as e:
+        except Exception as e:  # noqa:BLE001
             tqdm.write(click.style(f"[{resource.prefix}] failed to standardize - {e}", fg="red"))
             continue
         tqdm.write(
