@@ -13,7 +13,7 @@ import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
 
 import curies
 from curies.vocabulary import SynonymScopeOIO
@@ -281,6 +281,7 @@ def read(
     timeout: TimeoutHint = ...,
     squeeze: Literal[False] = ...,
     encoding: str = ...,
+    clean: bool = ...,
 ) -> GraphDocument: ...
 
 
@@ -292,6 +293,7 @@ def read(
     timeout: TimeoutHint = ...,
     squeeze: Literal[True] = ...,
     encoding: str = ...,
+    clean: bool = ...,
 ) -> Graph: ...
 
 
@@ -302,6 +304,7 @@ def read(
     squeeze: bool = True,
     encoding: str | None = None,
     newline: str | None = None,
+    clean: bool = False,
 ) -> Graph | GraphDocument:
     """Read an OBO Graph document.
 
@@ -315,12 +318,13 @@ def read(
         :func:`pystow.utils.safe_open`
     :param newline: The ``newline`` when reading a local filepath, passed to
         :func:`pystow.utils.safe_open`
+    :param clean: Should the raw JSON get cleaned?
 
     :returns: A graph or graph document
 
     :raises ValueError: If squeeze is set to true and multiple graphs are received
     """
-    if isinstance(source, str) and (source.startswith("https://") or source.startswith("http://")):
+    if isinstance(source, str) and (source.startswith(("https://", "http://"))):
         import requests
 
         if source.endswith(".gz"):
@@ -328,11 +332,16 @@ def read(
         else:
             res = requests.get(source, timeout=timeout)
             res_json = res.json()
+            if clean:
+                res_json = correct_raw_json(res_json)
             graph_document = GraphDocument.model_validate(res_json)
 
     elif isinstance(source, str | Path):
         with safe_open(source, encoding=encoding, newline=newline) as file:
-            graph_document = GraphDocument.model_validate(json.load(file))
+            raw = json.load(file)
+        if clean:
+            raw = correct_raw_json(raw)
+        graph_document = GraphDocument.model_validate(raw)
     else:
         raise TypeError(f"Unhandled source: {source}")
 
@@ -345,3 +354,42 @@ def read(
         )
     else:
         return graph_document.graphs[0]
+
+
+def correct_raw_json(graph_document_raw: dict[str, Any]) -> dict[str, Any]:
+    """Correct issues in raw graph documents, in place."""
+    for graph in graph_document_raw["graphs"]:
+        _clean_raw_meta(graph)
+        if "nodes" in graph:
+            graph["nodes"] = [node for node in graph["nodes"] if "type" in node]
+            for node in graph["nodes"]:
+                _clean_raw_meta(node)
+        for edge in graph.get("edges", []):
+            _clean_raw_meta(edge)
+    return graph_document_raw
+
+
+def _clean_raw_meta(element: dict[str, Any]) -> None:
+    meta = element.get("meta")
+    if not meta:
+        return
+    basic_property_values = meta.get("basicPropertyValues")
+    if basic_property_values:
+        meta["basicPropertyValues"] = [
+            basic_property_value
+            for basic_property_value in basic_property_values
+            if basic_property_value.get("pred") and basic_property_value.get("val")
+        ]
+
+    definition = meta.get("definition")
+    if definition is not None and not definition.get("val"):
+        del meta["definition"]
+
+    xrefs = meta.get("xrefs")
+    if xrefs:
+        meta["xrefs"] = [xref for xref in xrefs if xref.get("val")]
+
+    # What's the point of a synonym with an empty value? Nothing!
+    synonyms = meta.get("synonyms")
+    if synonyms:
+        meta["synonyms"] = [synonym for synonym in synonyms if synonym.get("val")]

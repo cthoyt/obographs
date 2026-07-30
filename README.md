@@ -43,7 +43,9 @@ data model.
 ```python
 import obographs
 
-url = "https://raw.githubusercontent.com/geneontology/obographs/refs/heads/master/examples/abox.json"
+url = (
+    "https://raw.githubusercontent.com/geneontology/obographs/refs/heads/master/examples/abox.json"
+)
 graph_raw = obographs.read(url)
 ```
 
