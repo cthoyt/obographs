@@ -18,6 +18,7 @@ from .model import (
     PropertyType,
     Synonym,
     Xref,
+    correct_raw_graph_document,
     read,
 )
 from .standardized import (
@@ -70,6 +71,7 @@ __all__ = [
     "StandardizedXref",
     "Synonym",
     "Xref",
+    "correct_raw_graph_document",
     "guess_primary_graph",
     "read",
 ]

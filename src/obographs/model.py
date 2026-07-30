@@ -40,6 +40,7 @@ __all__ = [
     "PropertyType",
     "Synonym",
     "Xref",
+    "correct_raw_graph_document",
     "read",
 ]
 
@@ -333,14 +334,14 @@ def read(
             res = requests.get(source, timeout=timeout)
             res_json = res.json()
             if clean:
-                res_json = correct_raw_json(res_json)
+                res_json = correct_raw_graph_document(res_json)
             graph_document = GraphDocument.model_validate(res_json)
 
     elif isinstance(source, str | Path):
         with safe_open(source, encoding=encoding, newline=newline) as file:
             raw = json.load(file)
         if clean:
-            raw = correct_raw_json(raw)
+            raw = correct_raw_graph_document(raw)
         graph_document = GraphDocument.model_validate(raw)
     else:
         raise TypeError(f"Unhandled source: {source}")
@@ -356,7 +357,7 @@ def read(
         return graph_document.graphs[0]
 
 
-def correct_raw_json(graph_document_raw: dict[str, Any]) -> dict[str, Any]:
+def correct_raw_graph_document(graph_document_raw: dict[str, Any]) -> dict[str, Any]:
     """Correct issues in raw graph documents, in place."""
     for graph in graph_document_raw["graphs"]:
         _clean_raw_meta(graph)
