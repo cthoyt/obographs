@@ -5,13 +5,12 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import Generic, TypeVar, cast
+from typing import Generic, Self, TypeVar, cast
 
 import curies.preprocessing
 from curies import Converter, Reference, Triple, vocabulary
 from curies.vocabulary import SynonymScopeOIO, has_title, owl_version_info
 from pydantic import BaseModel, Field
-from typing_extensions import Self
 
 from obographs.model import (
     Definition,
