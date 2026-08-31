@@ -9,16 +9,17 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, TypeAlias, overload
+from typing import TYPE_CHECKING, Any, Literal, TextIO, TypeAlias, overload
 
 import curies
 from curies.vocabulary import SynonymScopeOIO
 from pydantic import BaseModel, Field
-from pystow.utils import safe_open
+from pystow.utils import safe_open_json
+
+from .version import VERSION
 
 if TYPE_CHECKING:
     from .standardized import StandardizedGraph, StandardizedGraphDocument
@@ -277,7 +278,7 @@ def get_id_to_edges(graph: Graph) -> dict[str, list[tuple[str, str]]]:
 # docstr-coverage:excused `overload`
 @overload
 def read(
-    source: str | Path,
+    source: str | Path | TextIO,
     *,
     timeout: TimeoutHint = ...,
     squeeze: Literal[False] = ...,
@@ -289,7 +290,7 @@ def read(
 # docstr-coverage:excused `overload`
 @overload
 def read(
-    source: str | Path,
+    source: str | Path | TextIO,
     *,
     timeout: TimeoutHint = ...,
     squeeze: Literal[True] = ...,
@@ -299,7 +300,7 @@ def read(
 
 
 def read(
-    source: str | Path,
+    source: str | Path | TextIO,
     *,
     timeout: TimeoutHint = None,
     squeeze: bool = True,
@@ -325,26 +326,27 @@ def read(
 
     :raises ValueError: If squeeze is set to true and multiple graphs are received
     """
-    if isinstance(source, str) and (source.startswith(("https://", "http://"))):
+    if isinstance(source, str) and source.startswith(("https://", "http://")):
         import requests
 
         if source.endswith(".gz"):
             raise NotImplementedError
-        else:
-            res = requests.get(source, timeout=timeout)
-            res_json = res.json()
-            if clean:
-                res_json = correct_raw_graph_document(res_json)
-            graph_document = GraphDocument.model_validate(res_json)
-
-    elif isinstance(source, str | Path):
-        with safe_open(source, encoding=encoding, newline=newline) as file:
-            raw = json.load(file)
-        if clean:
-            raw = correct_raw_graph_document(raw)
-        graph_document = GraphDocument.model_validate(raw)
+        res = requests.get(
+            source,
+            timeout=timeout,
+            headers={
+                "User-Agent": f"python-obographs v{VERSION}",
+            },
+        )
+        raw = res.json()
+    elif isinstance(source, str | Path | TextIO):
+        raw = safe_open_json(source, encoding=encoding, newline=newline)
     else:
         raise TypeError(f"Unhandled source: {source}")
+
+    if clean:
+        raw = correct_raw_graph_document(raw)
+    graph_document = GraphDocument.model_validate(raw)
 
     if not squeeze:
         return graph_document
